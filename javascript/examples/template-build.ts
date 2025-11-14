@@ -23,7 +23,7 @@ async function main() {
   // 2. Build the template
   console.log('\n2. Building template...');
   const result = await Template.build(template, {
-    alias: 'my-python-app',
+    name: 'my-python-app',
     apiKey: process.env.HOPX_API_KEY || '',
     baseURL: process.env.HOPX_BASE_URL || 'https://api.hopx.dev',
     cpu: 2,

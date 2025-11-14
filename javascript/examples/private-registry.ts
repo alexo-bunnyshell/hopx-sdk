@@ -14,7 +14,7 @@ async function example1_githubRegistry() {
   console.log('Example 1: GitHub Container Registry\n');
   
   const template = new Template()
-    .fromImage('ghcr.io/mycompany/api-server:v2.1.0', {
+    .fromPrivateImage('ghcr.io/mycompany/api-server:v2.1.0', {
       username: process.env.GITHUB_USER!,
       password: process.env.GITHUB_TOKEN! // Personal access token
     })
@@ -22,7 +22,7 @@ async function example1_githubRegistry() {
     .setStartCmd('node dist/server.js', waitForPort(8080));
   
   const result = await Template.build(template, {
-    alias: 'api-server-private',
+    name: 'api-server-private',
     apiKey: process.env.HOPX_API_KEY!
   });
   
@@ -37,14 +37,14 @@ async function example2_gitlabRegistry() {
   console.log('Example 2: GitLab Container Registry\n');
   
   const template = new Template()
-    .fromImage('registry.gitlab.com/mygroup/myproject/app:latest', {
+    .fromPrivateImage('registry.gitlab.com/mygroup/myproject/app:latest', {
       username: process.env.GITLAB_USER!,
       password: process.env.GITLAB_TOKEN! // Deploy token or personal access token
     })
     .setStartCmd('python app.py', waitForPort(5000));
   
   const result = await Template.build(template, {
-    alias: 'gitlab-app',
+    name: 'gitlab-app',
     apiKey: process.env.HOPX_API_KEY!
   });
   
@@ -60,7 +60,7 @@ async function example3_gcpRegistry() {
   
   // From file path
   const template1 = new Template()
-    .fromGCPRegistry('gcr.io/my-project/ml-model:v1', {
+    .fromGCPPrivateImage('gcr.io/my-project/ml-model:v1', {
       serviceAccountJSON: './gcp-service-account.json'
     })
     .setEnv('MODEL_PATH', '/models/latest')
@@ -68,7 +68,7 @@ async function example3_gcpRegistry() {
   
   // From object
   const template2 = new Template()
-    .fromGCPRegistry('us.gcr.io/my-project/app:latest', {
+    .fromGCPPrivateImage('us.gcr.io/my-project/app:latest', {
       serviceAccountJSON: {
         type: 'service_account',
         project_id: 'my-project',
@@ -90,7 +90,7 @@ async function example4_awsECR() {
   console.log('Example 4: AWS ECR\n');
   
   const template = new Template()
-    .fromAWSRegistry(
+    .fromAWSPrivateImage(
       '123456789.dkr.ecr.us-west-1.amazonaws.com/webapp:v3.0',
       {
         accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
@@ -101,7 +101,7 @@ async function example4_awsECR() {
     .setStartCmd('./webapp', waitForPort(8080));
   
   const result = await Template.build(template, {
-    alias: 'aws-webapp',
+    name: 'aws-webapp',
     apiKey: process.env.HOPX_API_KEY!
   });
   
@@ -116,14 +116,14 @@ async function example5_privateDockerHub() {
   console.log('Example 5: Private Docker Hub\n');
   
   const template = new Template()
-    .fromImage('myusername/private-image:latest', {
+    .fromPrivateImage('myusername/private-image:latest', {
       username: process.env.DOCKER_HUB_USER!,
       password: process.env.DOCKER_HUB_TOKEN! // Access token
     })
     .setStartCmd('npm start', waitForPort(3000));
   
   const result = await Template.build(template, {
-    alias: 'dockerhub-app',
+    name: 'dockerhub-app',
     apiKey: process.env.HOPX_API_KEY!
   });
   
@@ -138,14 +138,14 @@ async function example6_selfHostedRegistry() {
   console.log('Example 6: Self-Hosted Registry\n');
   
   const template = new Template()
-    .fromImage('registry.mycompany.com:5000/internal/app:latest', {
+    .fromPrivateImage('registry.mycompany.com:5000/internal/app:latest', {
       username: 'deploy',
       password: process.env.REGISTRY_PASSWORD!
     })
     .setStartCmd('./app', waitForPort(8080));
   
   const result = await Template.build(template, {
-    alias: 'internal-app',
+    name: 'internal-app',
     apiKey: process.env.HOPX_API_KEY!
   });
   

@@ -8,14 +8,20 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 export class Template {
+  private fromImage?: string;
+  private registryAuth?: RegistryAuth;
   private steps: Step[] = [];
   private startCmd?: string;
   private readyCheck?: ReadyCheck;
   
   /**
    * Create a new template builder
+   * 
+   * @param fromImage - Optional base Docker image (e.g., "python:3.11-slim", "ubuntu:22.04")
    */
-  constructor() {}
+  constructor(fromImage?: string) {
+    this.fromImage = fromImage;
+  }
   
   // ==================== Base Images ====================
   
@@ -23,10 +29,7 @@ export class Template {
    * Start from Ubuntu base image
    */
   fromUbuntuImage(version: string): Template {
-    this.steps.push({
-      type: StepType.FROM,
-      args: [`ubuntu:${version}`],
-    });
+    this.fromImage = `ubuntu:${version}`;
     return this;
   }
   
@@ -34,40 +37,77 @@ export class Template {
    * Start from Python base image
    */
   fromPythonImage(version: string): Template {
-    this.steps.push({
-      type: StepType.FROM,
-      args: [`python:${version}`],
-    });
+    this.fromImage = `python:${version}`;
     return this;
   }
   
   /**
-   * Start from Node.js base image
+   * Use a Node.js base image (Debian-based)
+   * 
+   * Note: Only Debian-based Node.js images are supported. Alpine variants are not compatible
+   * with our VM agent system due to musl libc limitations.
+   * 
+   * @param version - Node.js version (e.g., '18', '20', '22')
+   * @returns Template builder for method chaining
+   * 
+   * @example
+   * template.fromNodeImage('20');  // Uses ubuntu/node:20-22.04_edge
+   * 
+   * @see https://hub.docker.com/r/ubuntu/node
    */
   fromNodeImage(version: string): Template {
-    this.steps.push({
-      type: StepType.FROM,
-      args: [`node:${version}`],
-    });
+    this.fromImage = `ubuntu/node:${version}-22.04_edge`;
     return this;
   }
   
   /**
-   * Start from any Docker image (with optional authentication)
+   * Use a Docker image from a private registry with basic authentication
+   * 
+   * @param image - Docker image URL (e.g., "registry.example.com/myimage:tag")
+   * @param auth - Registry credentials (username and password/token)
+   * @returns Template builder for method chaining
+   * 
+   * @example
+   * // Docker Hub private repository
+   * template.fromPrivateImage('myuser/private-app:v1', {
+   *   username: 'myuser',
+   *   password: process.env.DOCKER_HUB_TOKEN
+   * });
+   * 
+   * @example
+   * // GitLab Container Registry
+   * template.fromPrivateImage('registry.gitlab.com/mygroup/myproject/app:latest', {
+   *   username: 'gitlab-ci-token',
+   *   password: process.env.CI_JOB_TOKEN
+   * });
    */
-  fromImage(image: string, auth?: RegistryAuth): Template {
-    this.steps.push({
-      type: StepType.FROM,
-      args: [image],
-      registryAuth: auth,
-    });
+  fromPrivateImage(image: string, auth: RegistryAuth): Template {
+    this.fromImage = image;
+    this.registryAuth = auth;
     return this;
   }
   
   /**
-   * Start from GCP Container Registry image
+   * Use a Docker image from Google Container Registry (GCR) or Artifact Registry
+   * 
+   * @param image - GCP registry image URL (e.g., "gcr.io/myproject/myimage:tag" or "us-docker.pkg.dev/myproject/myrepo/myimage:tag")
+   * @param auth - GCP service account credentials
+   * @returns Template builder for method chaining
+   * 
+   * @example
+   * // With service account JSON file path
+   * template.fromGCPPrivateImage('gcr.io/myproject/api-server:v1', {
+   *   serviceAccountJSON: './service-account.json'
+   * });
+   * 
+   * @example
+   * // With service account JSON object
+   * const serviceAccount = JSON.parse(process.env.GCP_SERVICE_ACCOUNT);
+   * template.fromGCPPrivateImage('us-docker.pkg.dev/myproject/myrepo/app:latest', {
+   *   serviceAccountJSON: serviceAccount
+   * });
    */
-  fromGCPRegistry(image: string, auth: GCPRegistryAuth): Template {
+  fromGCPPrivateImage(image: string, auth: GCPRegistryAuth): Template {
     let serviceAccount: any;
     
     if (typeof auth.serviceAccountJSON === 'string') {
@@ -86,19 +126,43 @@ export class Template {
       password: JSON.stringify(serviceAccount),
     };
     
-    return this.fromImage(image, registryAuth);
+    this.fromImage = image;
+    this.registryAuth = registryAuth;
+    return this;
   }
   
   /**
-   * Start from AWS ECR image
+   * Use a Docker image from AWS Elastic Container Registry (ECR)
+   * 
+   * The backend will handle ECR authentication token exchange using the provided credentials.
+   * 
+   * @param image - ECR image URL (e.g., "123456789012.dkr.ecr.us-west-2.amazonaws.com/myapp:latest")
+   * @param auth - AWS IAM credentials with ECR pull permissions
+   * @returns Template builder for method chaining
+   * 
+   * @example
+   * template.fromAWSPrivateImage('123456789012.dkr.ecr.us-west-2.amazonaws.com/myapp:v1', {
+   *   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+   *   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+   *   region: 'us-west-2'
+   * });
+   * 
+   * @example
+   * // With session token for temporary credentials
+   * template.fromAWSPrivateImage('123456789012.dkr.ecr.us-east-1.amazonaws.com/api:latest', {
+   *   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+   *   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+   *   region: 'us-east-1',
+   *   sessionToken: process.env.AWS_SESSION_TOKEN
+   * });
    */
-  fromAWSRegistry(image: string, auth: AWSRegistryAuth): Template {
-    // Store AWS credentials - backend will handle token exchange
-    this.steps.push({
-      type: StepType.FROM,
-      args: [image],
-      awsAuth: auth,
-    });
+  fromAWSPrivateImage(image: string, auth: AWSRegistryAuth): Template {
+    // Store AWS credentials - backend will handle ECR token exchange
+    this.fromImage = image;
+    this.registryAuth = {
+      username: auth.accessKeyId,
+      password: auth.secretAccessKey,
+    };
     return this;
   }
   
@@ -106,13 +170,38 @@ export class Template {
   
   /**
    * Copy files to the template
+   * 
+   * @param src - Source file(s) or directory to copy (string or array of strings)
+   * @param dest - Destination path in the template
+   * @param options - Optional copy options (owner, permissions)
+   * @returns Template builder for method chaining
+   * 
+   * @example
+   * // Copy single file
+   * template.copy('app.py', '/app/app.py');
+   * 
+   * @example
+   * // Copy directory
+   * template.copy('src/', '/app/src/');
+   * 
+   * @example
+   * // Copy multiple files
+   * template.copy(['file1.py', 'file2.py'], '/app/');
+   * 
+   * @example
+   * // Copy with options
+   * template.copy('config.json', '/etc/app/config.json', {
+   *   owner: 'appuser:appgroup',
+   *   permissions: '0644'
+   * });
    */
   copy(src: string | string[], dest: string, options?: CopyOptions): Template {
     const sources = Array.isArray(src) ? src : [src];
     
     this.steps.push({
       type: StepType.COPY,
-      args: [sources.join(','), dest, JSON.stringify(options || {})],
+      args: [sources.join(','), dest],
+      copyOptions: options,
       // filesHash will be calculated during build
     });
     return this;
@@ -336,7 +425,21 @@ export class Template {
   // ==================== Build ====================
   
   /**
-   * Get all steps
+   * Get base image
+   */
+  getFromImage(): string | undefined {
+    return this.fromImage;
+  }
+  
+  /**
+   * Get registry authentication
+   */
+  getRegistryAuth(): RegistryAuth | undefined {
+    return this.registryAuth;
+  }
+  
+  /**
+   * Get all steps (excludes FROM - that's in from_image)
    */
   getSteps(): Step[] {
     return this.steps;
@@ -365,7 +468,7 @@ export class Template {
 }
 
 // Factory function
-export function createTemplate(): Template {
-  return new Template();
+export function createTemplate(fromImage?: string): Template {
+  return new Template(fromImage);
 }
 

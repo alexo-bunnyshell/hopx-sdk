@@ -16,7 +16,7 @@ async def main():
     
     template = (
         Template()
-        .from_node_image("18-alpine")
+        .from_node_image("20")  # Uses ubuntu/node:20-22.04_edge (Debian-based)
         .copy("package.json", "/app/package.json")
         .copy("src/", "/app/src/")
         .set_workdir("/app")
@@ -30,7 +30,7 @@ async def main():
     result = await Template.build(
         template,
         BuildOptions(
-            alias="nodejs-express-app",
+            name="nodejs-express-app",
             api_key=os.environ["HOPX_API_KEY"],
             on_log=lambda log: print(f"[{log['level']}] {log['message']}"),
         ),

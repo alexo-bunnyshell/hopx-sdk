@@ -25,42 +25,40 @@ const DEFAULT_BASE_URL = 'https://api.hopx.dev';
  * Validate template before building
  */
 function validateTemplate(template: Template): void {
-  const steps = template.getSteps();
-  
-  if (steps.length === 0) {
-    throw new Error('Template must have at least one step');
-  }
-  
-  // Check for FROM step
-  const hasFrom = steps.some(step => step.type === StepType.FROM);
-  if (!hasFrom) {
+  // Check for from_image
+  const fromImage = template.getFromImage();
+  if (!fromImage) {
     throw new Error(
-      'Template must start with a FROM step.\n' +
+      'Template must specify a base image.\n\n' +
       'Examples:\n' +
+      '  new Template(\'python:3.11-slim\')\n' +
       '  .fromUbuntuImage(\'22.04\')\n' +
       '  .fromPythonImage(\'3.12\')\n' +
-      '  .fromNodeImage(\'20\')'
+      '  .fromNodeImage(\'20\')\n\n' +
+      'See: https://docs.hopx.ai/templates/base-images'
     );
   }
   
-  // Check for meaningful steps (not just FROM + ENV)
+  const steps = template.getSteps();
+  
+  // Check for meaningful steps (at least one build step)
   const meaningfulSteps = steps.filter(
-    step => step.type !== StepType.FROM &&
-            step.type !== StepType.ENV &&
+    step => step.type !== StepType.ENV &&
             step.type !== StepType.WORKDIR &&
             step.type !== StepType.USER
   );
   
   if (meaningfulSteps.length === 0) {
     throw new Error(
-      'Template must have at least one build step besides FROM/ENV/WORKDIR/USER.\n' +
-      'Environment variables can be set when creating a sandbox.\n' +
+      'Template must have at least one build step besides ENV/WORKDIR/USER.\n' +
+      'Environment variables can be set when creating a sandbox.\n\n' +
       'Add at least one of:\n' +
       '  .runCmd(\'...\')     - Execute shell command\n' +
       '  .aptInstall(...)   - Install system packages\n' +
       '  .pipInstall(...)   - Install Python packages\n' +
       '  .npmInstall(...)   - Install Node packages\n' +
-      '  .copy(\'src\', \'dst\') - Copy files'
+      '  .copy(\'src\', \'dst\') - Copy files\n\n' +
+      'See: https://docs.hopx.ai/templates/building'
     );
   }
 }
@@ -83,6 +81,7 @@ export async function buildTemplate(template: Template, options: BuildOptions): 
   
   // Step 3: Trigger build
   const buildResponse = await triggerBuild(
+    template,
     stepsWithHashes,
     template.getStartCmd(),
     template.getReadyCheck(),
@@ -91,15 +90,17 @@ export async function buildTemplate(template: Template, options: BuildOptions): 
   );
   
   // Step 4: Stream logs (if callback provided)
+  // Note: Logs endpoint uses templateID
   if (options.onLog || options.onProgress) {
-    await streamLogs(buildResponse.buildID, baseURL, options);
+    await streamLogs(buildResponse.templateID, baseURL, options);
   }
   
   // Step 5: Poll status until complete (build process)
+  // Note: Status endpoint uses buildID
   const finalStatus = await pollStatus(buildResponse.buildID, baseURL, options);
   
   if (finalStatus.status !== 'active' && finalStatus.status !== 'success') {
-    throw new Error(`Build failed: ${finalStatus.error || 'Unknown error'}`);
+    throw new Error(`Build failed: ${finalStatus.errorMessage || 'Unknown error'}`);
   }
   
   // Step 6: Wait for template to be published (background job: publishing → active)
@@ -109,13 +110,16 @@ export async function buildTemplate(template: Template, options: BuildOptions): 
   // Calculate duration
   const duration = Date.now() - new Date(finalStatus.startedAt).getTime();
   
-  // Return result with createVM helper
+  // Return result with createVM and getLogs helpers
   return {
     buildID: buildResponse.buildID,
     templateID: finalStatus.templateID,
     duration,
     createVM: async (vmOptions: CreateVMOptions) => {
       return createVMFromTemplate(finalStatus.templateID, baseURL, options, vmOptions);
+    },
+    getLogs: async (offset: number = 0): Promise<LogsResponse> => {
+      return getLogs(buildResponse.templateID, options.apiKey, offset, baseURL);
     },
   };
 }
@@ -263,22 +267,27 @@ function transformStepsForAPI(steps: Step[]): any[] {
   const apiSteps: any[] = [];
   
   for (const step of steps) {
-    // Transform FROM steps
-    if (step.type === StepType.FROM) {
-      apiSteps.push({
-        type: 'FROM',
-        args: step.args,
-      });
-      continue;
-    }
+    // Note: FROM is no longer a step - it's in from_image field
     
     // Transform COPY steps
     if (step.type === StepType.COPY) {
-      apiSteps.push({
+      const copyStep: any = {
         type: 'COPY',
         args: step.args,
         filesHash: step.filesHash,
-      });
+      };
+      
+      // Add copy options if present
+      if (step.copyOptions) {
+        if (step.copyOptions.owner) {
+          copyStep.owner = step.copyOptions.owner;
+        }
+        if (step.copyOptions.permissions) {
+          copyStep.permissions = step.copyOptions.permissions;
+        }
+      }
+      
+      apiSteps.push(copyStep);
       continue;
     }
     
@@ -337,24 +346,40 @@ function transformReadyCheckForAPI(readyCheck: any): any {
  * Trigger build
  */
 async function triggerBuild(
+  template: Template,
   steps: Step[],
   startCmd: string | undefined,
   readyCmd: any,
   baseURL: string,
   options: BuildOptions
 ): Promise<BuildResponse> {
+  // Get from_image and registry credentials
+  const fromImage = template.getFromImage();
+  const registryAuth = template.getRegistryAuth();
+  
   // Transform steps to API format
   const apiSteps = transformStepsForAPI(steps);
   const apiReadyCmd = transformReadyCheckForAPI(readyCmd);
   
   const body: any = {
-    alias: options.alias,
+    name: options.name,
+    from_image: fromImage,  // Required, separate from steps
     steps: apiSteps,
     cpu: options.cpu || 2,
     memory: options.memory || 2048,
     diskGB: options.diskGB || 10,
     skipCache: options.skipCache || false,
+    update: options.update || false,
   };
+  
+  // Add registry credentials if present
+  if (registryAuth) {
+    body.registry_credentials = {
+      type: 'basic',
+      username: registryAuth.username,
+      password: registryAuth.password,
+    };
+  }
   
   // Only include startCmd if defined
   if (startCmd) {
@@ -395,7 +420,7 @@ async function triggerBuild(
  * Stream logs via SSE
  */
 async function streamLogs(
-  buildID: string,
+  templateID: string,
   baseURL: string,
   options: BuildOptions
 ): Promise<void> {
@@ -405,7 +430,7 @@ async function streamLogs(
   while (true) {
     try {
       const response = await fetch(
-        `${baseURL}/v1/templates/build/${buildID}/logs?offset=${offset}`,
+        `${baseURL}/v1/templates/build/${templateID}/logs?offset=${offset}`,
         {
           headers: {
             'Authorization': `Bearer ${options.apiKey}`,
@@ -446,13 +471,10 @@ async function streamLogs(
         }
       }
       
-      // Update progress (estimate based on status)
+      // Update progress if provided by server
       if (options.onProgress && status === 'building') {
-        const progress = 50; // Building phase
-        if (progress !== lastProgress) {
-          options.onProgress(progress);
-          lastProgress = progress;
-        }
+        // Note: Progress tracking would need to be implemented by API
+        // For now, we don't report intermediate progress to avoid misleading information
       }
       
       // Check if complete
@@ -495,17 +517,18 @@ async function pollStatus(
     
     const data = await response.json() as any;
     
-    // Transform response from snake_case to camelCase
-    const status: BuildStatusResponse = {
-      buildID: data.build_id,
-      templateID: data.template_id,
-      status: data.status,
-      progress: data.progress || 0,
-      currentStep: data.current_step,
-      startedAt: data.started_at,
-      estimatedCompletion: data.estimated_completion,
-      error: data.error_message,
-    };
+  // Transform response from snake_case to camelCase
+  const status: BuildStatusResponse = {
+    buildID: data.build_id,
+    templateID: data.template_id,
+    status: data.status,
+    progress: data.progress || 0,
+    currentStep: data.current_step,
+    startedAt: data.started_at,
+    completedAt: data.completed_at,
+    errorMessage: data.error_message,
+    buildDurationMs: data.build_duration_ms,
+  };
     
     // Status can be: building, active (success), failed
     if (status.status === 'active' || status.status === 'completed' || status.status === 'success' || status.status === 'failed') {
@@ -520,7 +543,10 @@ async function pollStatus(
 /**
  * Get build logs with offset-based polling
  * 
- * @param buildID - Build ID
+ * Note: The API uses templateID for the logs endpoint (not buildID).
+ * BuildID and templateID are the same for template builds.
+ * 
+ * @param templateID - Template ID to retrieve logs for
  * @param apiKey - API key
  * @param offset - Starting offset (default: 0)
  * @param baseURL - Base URL (default: https://api.hopx.dev)
@@ -539,12 +565,12 @@ async function pollStatus(
  * ```
  */
 export async function getLogs(
-  buildID: string,
+  templateID: string,
   apiKey: string,
   offset: number = 0,
   baseURL: string = DEFAULT_BASE_URL
 ): Promise<LogsResponse> {
-  const url = new URL(`${baseURL}/v1/templates/build/${buildID}/logs`);
+  const url = new URL(`${baseURL}/v1/templates/build/${templateID}/logs`);
   url.searchParams.set('offset', offset.toString());
   
   const response = await fetch(url.toString(), {

@@ -12,48 +12,104 @@ from .build_flow import build_template
 class Template:
     """Fluent API for building templates"""
     
-    def __init__(self):
+    def __init__(self, from_image: Optional[str] = None):
+        """
+        Initialize template with base image
+        
+        Args:
+            from_image: Base Docker image (e.g. "python:3.11-slim", "ubuntu:22.04")
+        """
+        self.from_image: Optional[str] = from_image
         self.steps: List[Step] = []
         self.start_cmd: Optional[str] = None
         self.ready_check: Optional[ReadyCheck] = None
+        self.registry_auth: Optional[RegistryAuth] = None
     
     # ==================== Base Images ====================
     
     def from_ubuntu_image(self, version: str) -> 'Template':
         """Start from Ubuntu base image"""
-        self.steps.append(Step(
-            type=StepType.FROM,
-            args=[f"ubuntu:{version}"]
-        ))
+        self.from_image = f"ubuntu:{version}"
         return self
     
     def from_python_image(self, version: str) -> 'Template':
         """Start from Python base image"""
-        self.steps.append(Step(
-            type=StepType.FROM,
-            args=[f"python:{version}"]
-        ))
+        self.from_image = f"python:{version}"
         return self
     
     def from_node_image(self, version: str) -> 'Template':
-        """Start from Node.js base image"""
-        self.steps.append(Step(
-            type=StepType.FROM,
-            args=[f"node:{version}"]
-        ))
+        """
+        Use a Node.js base image (Debian-based)
+        
+        Note: Only Debian-based Node.js images are supported. Alpine variants are not compatible
+        with our VM agent system due to musl libc limitations.
+        
+        Args:
+            version: Node.js version (e.g., '18', '20', '22')
+        
+        Returns:
+            Template builder for method chaining
+        
+        Example:
+            template.from_node_image('20')  # Uses ubuntu/node:20-22.04_edge
+        
+        See: https://hub.docker.com/r/ubuntu/node
+        """
+        self.from_image = f"ubuntu/node:{version}-22.04_edge"
         return self
     
-    def from_image(self, image: str, auth: Optional[RegistryAuth] = None) -> 'Template':
-        """Start from any Docker image (with optional authentication)"""
-        self.steps.append(Step(
-            type=StepType.FROM,
-            args=[image],
-            registry_auth=auth
-        ))
+    def from_private_image(self, image: str, auth: RegistryAuth) -> 'Template':
+        """
+        Use a Docker image from a private registry with basic authentication
+        
+        Args:
+            image: Docker image URL (e.g. "registry.example.com/myimage:tag")
+            auth: Registry credentials (username and password/token)
+        
+        Returns:
+            Template builder for method chaining
+        
+        Examples:
+            # Docker Hub private repository
+            template.from_private_image('myuser/private-app:v1', RegistryAuth(
+                username='myuser',
+                password=os.getenv('DOCKER_HUB_TOKEN')
+            ))
+            
+            # GitLab Container Registry
+            template.from_private_image('registry.gitlab.com/mygroup/myproject/app:latest', RegistryAuth(
+                username='gitlab-ci-token',
+                password=os.getenv('CI_JOB_TOKEN')
+            ))
+        """
+        self.from_image = image
+        self.registry_auth = auth
         return self
     
-    def from_gcp_registry(self, image: str, auth: GCPRegistryAuth) -> 'Template':
-        """Start from GCP Container Registry image"""
+    def from_gcp_private_image(self, image: str, auth: GCPRegistryAuth) -> 'Template':
+        """
+        Use a Docker image from Google Container Registry (GCR) or Artifact Registry
+        
+        Args:
+            image: GCP registry image URL (e.g. "gcr.io/myproject/myimage:tag" or 
+                   "us-docker.pkg.dev/myproject/myrepo/myimage:tag")
+            auth: GCP service account credentials
+        
+        Returns:
+            Template builder for method chaining
+        
+        Examples:
+            # With service account JSON file path
+            template.from_gcp_private_image('gcr.io/myproject/api-server:v1', GCPRegistryAuth(
+                service_account_json='./service-account.json'
+            ))
+            
+            # With service account JSON object
+            service_account = json.loads(os.getenv('GCP_SERVICE_ACCOUNT'))
+            template.from_gcp_private_image('us-docker.pkg.dev/myproject/myrepo/app:latest', GCPRegistryAuth(
+                service_account_json=service_account
+            ))
+        """
         # Parse service account JSON
         if isinstance(auth.service_account_json, str):
             # It's a file path
@@ -69,15 +125,44 @@ class Template:
             password=json.dumps(service_account)
         )
         
-        return self.from_image(image, registry_auth)
+        self.from_image = image
+        self.registry_auth = registry_auth
+        return self
     
-    def from_aws_registry(self, image: str, auth: AWSRegistryAuth) -> 'Template':
-        """Start from AWS ECR image"""
-        self.steps.append(Step(
-            type=StepType.FROM,
-            args=[image],
-            aws_auth=auth
-        ))
+    def from_aws_private_image(self, image: str, auth: AWSRegistryAuth) -> 'Template':
+        """
+        Use a Docker image from AWS Elastic Container Registry (ECR)
+        
+        The backend will handle ECR authentication token exchange using the provided credentials.
+        
+        Args:
+            image: ECR image URL (e.g. "123456789012.dkr.ecr.us-west-2.amazonaws.com/myapp:latest")
+            auth: AWS IAM credentials with ECR pull permissions
+        
+        Returns:
+            Template builder for method chaining
+        
+        Examples:
+            template.from_aws_private_image('123456789012.dkr.ecr.us-west-2.amazonaws.com/myapp:v1', AWSRegistryAuth(
+                access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                region='us-west-2'
+            ))
+            
+            # With session token for temporary credentials
+            template.from_aws_private_image('123456789012.dkr.ecr.us-east-1.amazonaws.com/api:latest', AWSRegistryAuth(
+                access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                region='us-east-1',
+                session_token=os.getenv('AWS_SESSION_TOKEN')
+            ))
+        """
+        # Store AWS credentials - backend will handle ECR token exchange
+        self.from_image = image
+        self.registry_auth = RegistryAuth(
+            username=auth.access_key_id,
+            password=auth.secret_access_key
+        )
         return self
     
     # ==================== File Operations ====================
@@ -88,12 +173,23 @@ class Template:
         dest: str, 
         options: Optional[CopyOptions] = None
     ) -> 'Template':
-        """Copy files to the template"""
+        """
+        Copy files to the template
+        
+        Args:
+            src: Source path(s) - local file/directory to upload (e.g. ".", "src/", ["file1.py", "file2.py"])
+            dest: Destination path in template (e.g. "/app", "/home/user/code")
+            options: Optional copy options (owner, permissions)
+        
+        Note: Files are automatically uploaded to R2 and the hash is calculated.
+              The API receives only the destination path and hash.
+        """
         sources = src if isinstance(src, list) else [src]
         
         self.steps.append(Step(
             type=StepType.COPY,
-            args=[','.join(sources), dest, str(options or {})]
+            args=[','.join(sources), dest],  # Local sources for upload, destination for API
+            skip_cache=False
         ))
         return self
     
@@ -276,8 +372,16 @@ class Template:
     
     # ==================== Build ====================
     
+    def get_from_image(self) -> Optional[str]:
+        """Get base image"""
+        return self.from_image
+    
+    def get_registry_auth(self) -> Optional[RegistryAuth]:
+        """Get registry authentication"""
+        return self.registry_auth
+    
     def get_steps(self) -> List[Step]:
-        """Get all steps"""
+        """Get all steps (excludes FROM - that's in from_image)"""
         return self.steps
     
     def get_start_cmd(self) -> Optional[str]:
@@ -294,7 +398,20 @@ class Template:
         return await build_template(template, options)
 
 
-def create_template() -> Template:
-    """Factory function to create a new template"""
-    return Template()
+def create_template(from_image: Optional[str] = None) -> Template:
+    """
+    Factory function to create a new template
+    
+    Args:
+        from_image: Base Docker image (e.g. "python:3.11-slim")
+    
+    Example:
+        ```python
+        from hopx_ai.template import create_template
+        
+        template = create_template("python:3.11-slim")
+        template.run_cmd("pip install numpy pandas")
+        ```
+    """
+    return Template(from_image=from_image)
 

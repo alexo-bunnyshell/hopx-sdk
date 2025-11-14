@@ -9,8 +9,11 @@ from datetime import datetime
 
 
 class StepType(str, Enum):
-    """Step types for template building"""
-    FROM = "FROM"
+    """
+    Step types for template building
+    
+    Note: FROM is no longer a step type - use from_image field in Template or BuildOptions
+    """
     COPY = "COPY"
     RUN = "RUN"
     ENV = "ENV"
@@ -85,7 +88,7 @@ class ReadyCheck:
 @dataclass
 class BuildOptions:
     """Options for building a template"""
-    alias: str
+    name: str  # Template name (renamed from 'alias')
     api_key: str
     base_url: str = "https://api.hopx.dev"
     cpu: int = 2
@@ -95,6 +98,7 @@ class BuildOptions:
     context_path: Optional[str] = None
     on_log: Optional[Callable[[Dict[str, Any]], None]] = None
     on_progress: Optional[Callable[[int], None]] = None
+    update: bool = False  # Set to True to update existing template
 
 
 @dataclass
@@ -147,12 +151,47 @@ class BuildResult:
     template_id: str
     duration: int
     _create_vm_func: Optional[Callable[[CreateVMOptions], Any]] = None
+    _base_url: Optional[str] = None
+    _api_key: Optional[str] = None
     
     async def create_vm(self, options: CreateVMOptions = None) -> VM:
         """Create a VM from this template"""
         if self._create_vm_func:
             return await self._create_vm_func(options or CreateVMOptions())
         raise RuntimeError("create_vm function not available")
+    
+    async def get_logs(self, offset: int = 0) -> "LogsResponse":
+        """
+        Get build logs for this template
+        
+        Args:
+            offset: Starting offset for log retrieval (default: 0)
+            
+        Returns:
+            LogsResponse with logs, offset, status, and completion info
+            
+        Example:
+            ```python
+            result = await Template.build(template, options)
+            
+            # Get all logs from the beginning
+            logs = await result.get_logs()
+            print(logs.logs)
+            
+            # Poll for new logs
+            logs = await result.get_logs(offset=logs.offset)
+            ```
+        """
+        if not self._base_url or not self._api_key:
+            raise RuntimeError("get_logs not available - base_url or api_key missing")
+        
+        from .build_flow import get_logs as get_build_logs
+        return await get_build_logs(
+            self.template_id,  # Use template_id instead of build_id
+            self._api_key,
+            offset=offset,
+            base_url=self._base_url
+        )
 
 
 @dataclass
@@ -183,8 +222,9 @@ class BuildStatusResponse:
     progress: int
     started_at: str
     current_step: Optional[str] = None
-    estimated_completion: Optional[str] = None
-    error: Optional[str] = None
+    completed_at: Optional[str] = None
+    error_message: Optional[str] = None
+    build_duration_ms: Optional[int] = None
     request_id: Optional[str] = None
 
 

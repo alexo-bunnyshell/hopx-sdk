@@ -34,7 +34,7 @@ async def main():
     result = await Template.build(
         template,
         BuildOptions(
-            alias="my-python-app",
+            name="my-python-app",
             api_key=os.environ.get("HOPX_API_KEY", ""),
             base_url=os.environ.get("HOPX_BASE_URL", "https://api.hopx.dev"),
             cpu=2,

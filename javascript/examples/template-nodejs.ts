@@ -10,7 +10,7 @@ async function main() {
   console.log('🚀 Node.js Template Example\n');
   
   const template = new Template()
-    .fromNodeImage('18-alpine')
+    .fromNodeImage('20')  // Uses ubuntu/node:20-22.04_edge (Debian-based)
     .copy('package.json', '/app/package.json')
     .copy('src/', '/app/src/')
     .setWorkdir('/app')
@@ -21,7 +21,7 @@ async function main() {
   
   console.log('Building Node.js template...');
   const result = await Template.build(template, {
-    alias: 'nodejs-express-app',
+    name: 'nodejs-express-app',
     apiKey: process.env.HOPX_API_KEY!,
     onLog: (log) => console.log(`[${log.level}] ${log.message}`),
   });

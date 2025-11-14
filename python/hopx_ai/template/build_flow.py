@@ -29,38 +29,38 @@ DEFAULT_BASE_URL = "https://api.hopx.dev"
 
 def _validate_template(template) -> None:
     """Validate template before building"""
-    steps = template.get_steps()
-    
-    if not steps:
-        raise ValueError("Template must have at least one step")
-    
-    # Check for FROM step
-    has_from = any(step.type == StepType.FROM for step in steps)
-    if not has_from:
+    # Check for from_image
+    from_image = template.get_from_image()
+    if not from_image:
         raise ValueError(
-            "Template must start with a FROM step.\n"
+            "Template must specify a base image.\n\n"
             "Examples:\n"
+            "  Template(from_image='python:3.11-slim')\n"
             "  .from_ubuntu_image('22.04')\n"
             "  .from_python_image('3.12')\n"
-            "  .from_node_image('20')"
+            "  .from_node_image('20')\n\n"
+            "See: https://docs.hopx.ai/templates/base-images"
         )
     
-    # Check for meaningful steps (not just FROM + ENV)
+    steps = template.get_steps()
+    
+    # Check for meaningful steps (at least one build step)
     meaningful_steps = [
         step for step in steps
-        if step.type not in [StepType.FROM, StepType.ENV, StepType.WORKDIR, StepType.USER]
+        if step.type not in [StepType.ENV, StepType.WORKDIR, StepType.USER]
     ]
     
     if not meaningful_steps:
         raise ValueError(
-            "Template must have at least one build step besides FROM/ENV/WORKDIR/USER.\n"
-            "Environment variables can be set when creating a sandbox.\n"
+            "Template must have at least one build step besides ENV/WORKDIR/USER.\n"
+            "Environment variables can be set when creating a sandbox.\n\n"
             "Add at least one of:\n"
             "  .run_cmd('...')     - Execute shell command\n"
             "  .apt_install(...)   - Install system packages\n"
             "  .pip_install(...)   - Install Python packages\n"
             "  .npm_install(...)   - Install Node packages\n"
-            "  .copy('src', 'dst') - Copy files"
+            "  .copy('src', 'dst') - Copy files\n\n"
+            "See: https://docs.hopx.ai/templates/building"
         )
 
 
@@ -93,6 +93,7 @@ async def build_template(template, options: BuildOptions) -> BuildResult:
     
     # Step 3: Trigger build
     build_response = await trigger_build(
+        template,
         steps_with_hashes,
         template.get_start_cmd(),
         template.get_ready_check(),
@@ -101,15 +102,17 @@ async def build_template(template, options: BuildOptions) -> BuildResult:
     )
     
     # Step 4: Stream logs (if callback provided)
+    # Note: Logs endpoint uses template_id
     if options.on_log or options.on_progress:
-        await stream_logs(build_response.build_id, base_url, options)
+        await stream_logs(build_response.template_id, base_url, options)
     
     # Step 5: Poll status until complete
+    # Note: Status endpoint uses build_id
     final_status = await poll_status(build_response.build_id, base_url, options)
     
     # Status "active" means template is ready
     if final_status.status not in ["active", "success"]:
-        raise Exception(f"Build failed: {final_status.error or 'Unknown error'}")
+        raise Exception(f"Build failed: {final_status.error_message or 'Unknown error'}")
     
     # Step 6: Wait for template to be published (background job: publishing → active)
     # Build is done, but template needs to be published to public API
@@ -141,6 +144,8 @@ async def build_template(template, options: BuildOptions) -> BuildResult:
         template_id=final_status.template_id,
         duration=duration,
         _create_vm_func=create_vm_helper,
+        _base_url=base_url,
+        _api_key=options.api_key,
     )
 
 
@@ -242,7 +247,8 @@ async def get_upload_link(
         },
     ) as response:
         if not response.ok:
-            raise Exception(f"Failed to get upload link: {response.status}")
+            error_text = await response.text()
+            raise Exception(f"Failed to get upload link ({response.status}): {error_text}")
         
         data = await response.json()
         return UploadLinkResponse(**data)
@@ -266,10 +272,12 @@ async def upload_file(
         data=file_content,
     ) as response:
         if not response.ok:
-            raise Exception(f"Upload failed: {response.status}")
+            error_text = await response.text()
+            raise Exception(f"Upload failed ({response.status}): {error_text}")
 
 
 async def trigger_build(
+    template,
     steps: List[Step],
     start_cmd: Optional[str],
     ready_cmd: Optional[dict],
@@ -277,7 +285,7 @@ async def trigger_build(
     options: BuildOptions,
 ) -> BuildResponse:
     """Trigger build"""
-    # Convert steps to dict
+    # Convert steps to dict (excluding FROM - that's in from_image)
     steps_dict = []
     for step in steps:
         step_dict = {
@@ -289,6 +297,10 @@ async def trigger_build(
         if step.skip_cache:
             step_dict["skipCache"] = True
         steps_dict.append(step_dict)
+    
+    # Get from_image and registry credentials
+    from_image = template.get_from_image()
+    registry_auth = template.get_registry_auth()
     
     # Convert ready check to dict
     ready_cmd_dict = None
@@ -309,6 +321,28 @@ async def trigger_build(
         if ready_cmd.command:
             ready_cmd_dict["command"] = ready_cmd.command
     
+    # Build request payload
+    payload = {
+        "name": options.name,  # Renamed from 'alias'
+        "from_image": from_image,  # Required, separate from steps
+        "steps": steps_dict,
+        "startCmd": start_cmd,
+        "readyCmd": ready_cmd_dict,
+        "cpu": options.cpu,
+        "memory": options.memory,
+        "diskGB": options.disk_gb,
+        "skipCache": options.skip_cache,
+        "update": options.update,
+    }
+    
+    # Add registry credentials if present
+    if registry_auth:
+        payload["registry_credentials"] = {
+            "type": "basic",
+            "username": registry_auth.username,
+            "password": registry_auth.password,
+        }
+    
     async with aiohttp.ClientSession() as session:
         async with session.post(
             f"{base_url}/v1/templates/build",
@@ -316,26 +350,18 @@ async def trigger_build(
                 "Authorization": f"Bearer {options.api_key}",
                 "Content-Type": "application/json",
             },
-            json={
-                "alias": options.alias,
-                "steps": steps_dict,
-                "startCmd": start_cmd,
-                "readyCmd": ready_cmd_dict,
-                "cpu": options.cpu,
-                "memory": options.memory,
-                "diskGB": options.disk_gb,
-                "skipCache": options.skip_cache,
-            },
+            json=payload,
         ) as response:
             if not response.ok:
-                raise Exception(f"Build trigger failed: {response.status}")
+                error_text = await response.text()
+                raise Exception(f"Build trigger failed ({response.status}): {error_text}")
             
             data = await response.json()
             return BuildResponse(**data)
 
 
 async def stream_logs(
-    build_id: str,
+    template_id: str,
     base_url: str,
     options: BuildOptions,
 ) -> None:
@@ -347,7 +373,7 @@ async def stream_logs(
         while True:
             try:
                 async with session.get(
-                    f"{base_url}/v1/templates/build/{build_id}/logs",
+                    f"{base_url}/v1/templates/build/{template_id}/logs",
                     params={"offset": offset},
                     headers={
                         "Authorization": f"Bearer {options.api_key}",
@@ -381,13 +407,11 @@ async def stream_logs(
                                     "timestamp": ""
                                 })
                     
-                    # Update progress (estimate based on status)
+                    # Update progress if provided by server
                     if options.on_progress and status == "building":
-                        # Simple progress estimation
-                        progress = 50  # Building phase
-                        if progress != last_progress:
-                            options.on_progress(progress)
-                            last_progress = progress
+                        # Note: Progress tracking would need to be implemented by API
+                        # For now, we don't report intermediate progress to avoid misleading information
+                        pass
                     
                     # Check if complete
                     if complete or status in ["active", "success", "failed"]:
@@ -419,7 +443,8 @@ async def poll_status(
                 },
             ) as response:
                 if not response.ok:
-                    raise Exception(f"Status check failed: {response.status}")
+                    error_text = await response.text()
+                    raise Exception(f"Status check failed ({response.status}): {error_text}")
                 
                 data = await response.json()
                 status = BuildStatusResponse(**data)
@@ -485,7 +510,7 @@ async def wait_for_template_active(
 
 
 async def get_logs(
-    build_id: str,
+    template_id: str,
     api_key: str,
     offset: int = 0,
     base_url: str = None,
@@ -493,8 +518,11 @@ async def get_logs(
     """
     Get build logs with offset-based polling
     
+    Note: The API uses template_id for the logs endpoint (not build_id).
+    build_id and template_id are the same for template builds.
+    
     Args:
-        build_id: Build ID
+        template_id: Template ID to retrieve logs for
         api_key: API key
         offset: Starting offset (default: 0)
         base_url: Base URL (default: https://api.hopx.dev)
@@ -521,14 +549,15 @@ async def get_logs(
     
     async with aiohttp.ClientSession() as session:
         async with session.get(
-            f"{base_url}/v1/templates/build/{build_id}/logs",
+            f"{base_url}/v1/templates/build/{template_id}/logs",
             params={"offset": offset},
             headers={
                 "Authorization": f"Bearer {api_key}",
             },
         ) as response:
             if not response.ok:
-                raise Exception(f"Get logs failed: {response.status}")
+                error_text = await response.text()
+                raise Exception(f"Get logs failed ({response.status}): {error_text}")
             
             data = await response.json()
             return LogsResponse(
