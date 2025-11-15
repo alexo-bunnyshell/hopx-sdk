@@ -1,6 +1,6 @@
 """Desktop automation resource for Hopx Sandboxes."""
 
-from typing import Optional, List, Tuple
+from typing import Any, Dict, Optional, List, Tuple
 import logging
 from ._agent_client import AgentHTTPClient
 from .models import VNCInfo, WindowInfo, RecordingInfo, DisplayInfo
