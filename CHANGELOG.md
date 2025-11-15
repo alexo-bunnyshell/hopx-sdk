@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.21] - 2025-15-11 - Python SDK
+Implement complete OpenAPI specification (v2025-10-21) compliance with
+  full endpoint coverage and enhanced models.
+
+  New Endpoints:
+  - Add DELETE /v1/templates/{templateID} for custom template deletion
+  - Expose GET /health as public method (no auth required)
+
+  Model Enhancements:
+  - SandboxInfo: Add internet_access, live_mode, direct_url, preview_url,
+    timeout_seconds, expires_at fields from OpenAPI spec
+  - Template: Add is_public, build_id, organization_id, created_at,
+    updated_at, object, request_id fields from OpenAPI spec
+
+  Implementation Updates:
+  - Enhanced get_info() parsing to include all OpenAPI response fields
+  - Proper datetime parsing for created_at and expires_at timestamps
+  - Backward compatibility maintained with legacy fields (started_at, end_at)
+  - Both sync (Sandbox) and async (AsyncSandbox) implementations updated
+  - All 18 Public API endpoints now fully implemented and tested
+
+  OpenAPI Coverage:
+  - System endpoints: 1/1 (health check)
+  - Sandbox endpoints: 10/10 (full lifecycle management)
+  - Template endpoints: 7/7 (complete CRUD + build operations)
+
 ## [0.1.21] - 2025-01-11 - JavaScript SDK
 ## [0.1.19] - 2025-01-11 - Python SDK
 
