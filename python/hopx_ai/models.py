@@ -70,7 +70,6 @@ class ExecutionResult(_ExecuteResponse):
     Auto-generated from OpenAPI spec (ExecuteResponse) with convenience methods.
     This is an alias for backward compatibility while adding DX improvements.
     """
-    model_config = {"protected_namespaces": ()}  # Allow 'json' field name
 
     # Add rich_outputs field (from /execute/rich endpoint, not in base ExecuteResponse)
     rich_outputs: Optional[List[RichOutput]] = Field(default=None, description="Rich outputs (plots, etc.)")
@@ -79,7 +78,7 @@ class ExecutionResult(_ExecuteResponse):
     svg: Optional[str] = Field(default=None, description="SVG output (image/svg+xml)")
     markdown: Optional[str] = Field(default=None, description="Markdown output (text/markdown)")
     html: Optional[str] = Field(default=None, description="HTML output (text/html)")
-    json: Optional[Dict[str, Any]] = Field(default=None, alias="json_output", description="JSON output (application/json)")
+    json_output: Optional[Dict[str, Any]] = Field(default=None, description="JSON output (application/json)")
     png: Optional[str] = Field(default=None, description="PNG output base64 (image/png)")
     result: Optional[str] = Field(default=None, description="Rich output from Jupyter (when available)")
 
@@ -96,7 +95,7 @@ class ExecutionResult(_ExecuteResponse):
             or self.svg
             or self.markdown
             or self.html
-            or self.json
+            or self.json_output
             or self.png
             or self.result
         )
