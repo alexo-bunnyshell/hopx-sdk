@@ -5,6 +5,36 @@ All notable changes to the Hopx Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6] - 2025-11-16
+
+### Fixed
+
+**Template Build Activation**
+- Fixed race condition in `wait_for_template_active()` that caused premature returns
+- Templates show `status="active"` immediately after build but transition to "publishing" for 60-120 seconds
+- SDK now requires 2 consecutive "active" status checks (6 seconds) before returning
+- Polling interval increased from 2 seconds to 3 seconds
+- Counter resets if status changes (e.g., `active` → `publishing`)
+- Prevents ServerError when creating sandboxes from newly built templates
+- Adds 3-6 seconds to build time, eliminates need to rebuild failed templates
+
+### Changed
+- Environment variable: `HOPX_TEMPLATE_BAKE_SECONDS` (default: 2700 seconds)
+- Poll interval: 3 seconds (previously 2 seconds)
+- Stability verification: 2 consecutive "active" checks required
+- Logging: Shows verification status and regression detection messages
+
+### Documentation
+- Added writing guidelines to CLAUDE.md for enterprise documentation standards
+- Updated CLAUDE.md with technical implementation details
+- Updated README.md with timeout configuration
+- Documented template lifecycle: `building → publishing → active`
+
+### Testing
+- Added `test_template_activation_fix.py` test script
+- Test verifies template build, sandbox creation, and code execution
+- Test detects `active → publishing` status transition correctly
+
 ## [0.1.19] - 2025-01-11
 
 ### 🎉 Public Release - Complete Feature Set

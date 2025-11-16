@@ -2,145 +2,45 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.19-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.2.6-blue.svg)](CHANGELOG.md)
 
 Official Python SDK for [Hopx.ai](https://hopx.ai) - Cloud sandboxes for AI agents and code execution.
 
-## 🚀 What is Hopx.ai?
+## What is Hopx.ai?
 
-**Hopx.ai** provides secure, isolated cloud sandboxes that spin up in seconds. Perfect for:
+Hopx.ai provides secure, isolated cloud sandboxes that start in seconds. Each sandbox is a lightweight VM with root access, pre-installed development tools, and configurable network access.
 
-- 🤖 **AI Agents** - Give your LLM agents safe environments to execute code, run commands, and manipulate files
-- 🔬 **Code Execution** - Run untrusted code safely in isolated VMs
-- 🧪 **Testing & CI/CD** - Spin up clean environments for integration tests
-- 📊 **Data Processing** - Execute data analysis scripts with rich output capture
-- 🌐 **Web Scraping** - Run browser automation in controlled environments
-- 🎓 **Education** - Provide students with sandboxed coding environments
+**Use cases:**
+- AI agent code execution
+- Running untrusted code safely
+- Integration testing
+- Data processing and analysis
+- Browser automation
+- Educational coding environments
 
-Each sandbox is a **lightweight VM** with:
+**Sandbox features:**
 - Full root access
 - Pre-installed development tools
-- Network access (configurable)
+- Configurable network access
 - Persistent filesystem during session
-- Auto-cleanup after timeout
+- Automatic cleanup after timeout
 
-## 📋 Key Use Cases
-
-### 1. AI Code Execution Agent
-
-```python
-from hopx_ai import Sandbox
-
-# Your AI agent generates code
-agent_code = """
-import pandas as pd
-df = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6]})
-print(df.describe())
-"""
-
-# Execute safely in sandbox
-sandbox = Sandbox.create(template="python")
-result = sandbox.run_code(agent_code)
-
-if result.success:
-    print(result.stdout)  # Show output to user
-else:
-    print(f"Error: {result.error}")
-
-sandbox.kill()
-```
-
-### 2. Data Analysis with Rich Outputs
-
-```python
-# Generate charts and capture them automatically
-code = """
-import matplotlib.pyplot as plt
-import numpy as np
-
-x = np.linspace(0, 10, 100)
-plt.plot(x, np.sin(x))
-plt.title('Sine Wave')
-plt.show()
-"""
-
-sandbox = Sandbox.create(template="python")
-result = sandbox.run_code(code)
-
-# Get PNG chart data
-if result.rich_outputs:
-    png_data = result.rich_outputs[0].data  # Base64 PNG
-    # Save or display the chart
-    
-sandbox.kill()
-```
-
-### 3. Multi-Step Workflow
-
-```python
-from hopx_ai import Sandbox
-
-sandbox = Sandbox.create(template="nodejs", timeout_seconds=600)
-
-# Step 1: Clone repo and install dependencies
-sandbox.commands.run("git clone https://github.com/user/project.git /app")
-sandbox.commands.run("cd /app && npm install")
-
-# Step 2: Run tests
-result = sandbox.commands.run("cd /app && npm test")
-print(f"Tests: {'✅ PASSED' if result.exit_code == 0 else '❌ FAILED'}")
-
-# Step 3: Build
-sandbox.commands.run("cd /app && npm run build")
-
-# Step 4: Get build artifacts
-files = sandbox.files.list("/app/dist/")
-for file in files:
-    print(f"Built: {file.name} ({file.size} bytes)")
-
-sandbox.kill()
-```
-
-### 4. File Processing
-
-```python
-sandbox = Sandbox.create(template="python")
-
-# Upload data
-sandbox.files.write("/tmp/data.csv", csv_content)
-
-# Process it
-result = sandbox.run_code("""
-import pandas as pd
-df = pd.read_csv('/tmp/data.csv')
-result = df.groupby('category').sum()
-result.to_csv('/tmp/output.csv')
-print(f"Processed {len(df)} rows")
-""")
-
-# Download result
-output = sandbox.files.read("/tmp/output.csv")
-print(output)
-
-sandbox.kill()
-```
-
-## 🎯 Quick Start
-
-### Installation
+## Installation
 
 ```bash
 pip install hopx-ai
 ```
 
-### Basic Example
+## Quick Start
+
+### Basic Usage
 
 ```python
 from hopx_ai import Sandbox
 
-# Create sandbox (~100ms)
+# Create sandbox
 sandbox = Sandbox.create(
-    template="python",  # or "nodejs", "go", "rust", etc.
+    template="python",
     api_key="your-api-key"  # or set HOPX_API_KEY env var
 )
 
@@ -156,11 +56,13 @@ print(result.stdout)
 # Python 3.11.x
 # Hello from Hopx!
 
-# Cleanup
+# Clean up
 sandbox.kill()
 ```
 
-### Context Manager (Auto-Cleanup)
+### Context Manager
+
+The context manager handles cleanup automatically:
 
 ```python
 from hopx_ai import Sandbox
@@ -168,7 +70,6 @@ from hopx_ai import Sandbox
 with Sandbox.create(template="python") as sandbox:
     result = sandbox.run_code("print(2 + 2)")
     print(result.stdout)  # "4"
-# Sandbox automatically cleaned up
 ```
 
 ### Async Support
@@ -185,11 +86,116 @@ async def main():
 asyncio.run(main())
 ```
 
-## 📚 Core Features
+## Examples
+
+### AI Code Execution
+
+Execute code generated by LLM agents:
+
+```python
+from hopx_ai import Sandbox
+
+agent_code = """
+import pandas as pd
+df = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6]})
+print(df.describe())
+"""
+
+sandbox = Sandbox.create(template="python")
+result = sandbox.run_code(agent_code)
+
+if result.success:
+    print(result.stdout)
+else:
+    print(f"Error: {result.error}")
+
+sandbox.kill()
+```
+
+### Data Analysis with Charts
+
+Capture matplotlib charts as base64-encoded PNG:
+
+```python
+code = """
+import matplotlib.pyplot as plt
+import numpy as np
+
+x = np.linspace(0, 10, 100)
+plt.plot(x, np.sin(x))
+plt.title('Sine Wave')
+plt.show()
+"""
+
+sandbox = Sandbox.create(template="python")
+result = sandbox.run_code(code)
+
+# Access chart data
+if result.rich_outputs:
+    png_data = result.rich_outputs[0].data  # Base64 PNG
+
+sandbox.kill()
+```
+
+### Multi-Step Workflow
+
+Run commands sequentially in the same environment:
+
+```python
+from hopx_ai import Sandbox
+
+sandbox = Sandbox.create(template="nodejs", timeout_seconds=600)
+
+# Clone and install
+sandbox.commands.run("git clone https://github.com/user/project.git /app")
+sandbox.commands.run("cd /app && npm install")
+
+# Run tests
+result = sandbox.commands.run("cd /app && npm test")
+print(f"Tests: {'PASSED' if result.exit_code == 0 else 'FAILED'}")
+
+# Build
+sandbox.commands.run("cd /app && npm run build")
+
+# List artifacts
+files = sandbox.files.list("/app/dist/")
+for file in files:
+    print(f"Built: {file.name} ({file.size} bytes)")
+
+sandbox.kill()
+```
+
+### File Processing
+
+Upload files, process data, and download results:
+
+```python
+sandbox = Sandbox.create(template="python")
+
+# Upload data
+sandbox.files.write("/tmp/data.csv", csv_content)
+
+# Process
+result = sandbox.run_code("""
+import pandas as pd
+df = pd.read_csv('/tmp/data.csv')
+result = df.groupby('category').sum()
+result.to_csv('/tmp/output.csv')
+print(f"Processed {len(df)} rows")
+""")
+
+# Download result
+output = sandbox.files.read("/tmp/output.csv")
+print(output)
+
+sandbox.kill()
+```
+
+## Core Features
 
 ### Code Execution
 
-Execute code in multiple languages with automatic output capture:
+Execute code in Python, JavaScript, or Bash:
 
 ```python
 # Python
@@ -229,13 +235,12 @@ sandbox.files.delete("/app/temp.txt")
 ### Commands
 
 ```python
-# Run command synchronously
+# Run synchronously
 result = sandbox.commands.run("ls -la /app")
 print(result.stdout)
 
 # Run in background
 cmd_id = sandbox.commands.run_async("python long_task.py")
-# ... do other work ...
 result = sandbox.commands.get_result(cmd_id)
 ```
 
@@ -245,7 +250,7 @@ result = sandbox.commands.get_result(cmd_id)
 # Set single variable
 sandbox.env.set("DATABASE_URL", "postgresql://...")
 
-# Set multiple
+# Set multiple variables
 sandbox.env.set_many({
     "API_KEY": "key123",
     "DEBUG": "true"
@@ -260,7 +265,7 @@ sandbox.env.delete("DEBUG")
 
 ### Template Building
 
-Build custom environments:
+Build custom sandbox environments with your dependencies:
 
 ```python
 from hopx_ai import Template, wait_for_port
@@ -282,7 +287,7 @@ template = (
 result = await Template.build(
     template,
     BuildOptions(
-        alias="my-python-app",
+        name="my-python-app",
         api_key="your-api-key",
         on_log=lambda log: print(f"[{log['level']}] {log['message']}")
     )
@@ -294,15 +299,17 @@ print(f"Template ID: {result.template_id}")
 sandbox = Sandbox.create(template_id=result.template_id)
 ```
 
-## 🔐 Authentication
+## Authentication
 
-Set your API key:
+Get your API key at [hopx.ai/dashboard](https://hopx.ai/dashboard)
+
+Set via environment variable:
 
 ```bash
 export HOPX_API_KEY="your-api-key"
 ```
 
-Or pass it directly:
+Or pass directly to methods:
 
 ```python
 sandbox = Sandbox.create(
@@ -311,56 +318,51 @@ sandbox = Sandbox.create(
 )
 ```
 
-Get your API key at [hopx.ai/dashboard](https://hopx.ai/dashboard)
+## Configuration
 
-## ⚙️ Configuration
+### Template Build Timeout
 
-### Template Activation Timeout
+`Template.build()` waits for templates to reach "active" status before returning. Templates transition through: building → publishing → active. The publishing phase takes 60-120 seconds.
 
-`Template.build()` waits for templates to reach "active" status before returning. Default: 45 minutes.
+**Default timeout:** 2700 seconds (45 minutes)
 
-**Via environment variable:**
+**Environment variable:**
 ```bash
-export HOPX_TEMPLATE_ACTIVATION_TIMEOUT=2700  # seconds (45 min default)
+export HOPX_TEMPLATE_BAKE_SECONDS=2700
 ```
 
-**Via BuildOptions:**
+**BuildOptions parameter:**
 ```python
 result = await Template.build(
     template,
     BuildOptions(
         name="my-template",
         api_key="...",
-        template_activation_timeout=1800  # 30 minutes
+        template_activation_timeout=1800  # 1800 seconds = 30 minutes
     )
 )
 ```
 
-## 🎓 Templates
+**Priority:** BuildOptions.template_activation_timeout > HOPX_TEMPLATE_BAKE_SECONDS > Default (2700s)
 
-Pre-built templates available:
+## Pre-built Templates
 
-- `python` - Python 3.11 with pip, numpy, pandas, requests
-- `nodejs` - Node.js 20 with npm, common packages
-- `code-interpreter` - Python with data science stack (pandas, numpy, matplotlib, seaborn, scikit-learn)
-- `go` - Go 1.21
-- `rust` - Rust with Cargo
-- `java` - Java 17 with Maven
+| Template | Description |
+|----------|-------------|
+| `python` | Python 3.11 with pip, numpy, pandas, requests |
+| `nodejs` | Node.js 20 with npm, common packages |
+| `code-interpreter` | Python with data science stack (pandas, numpy, matplotlib, seaborn, scikit-learn) |
+| `go` | Go 1.21 |
+| `rust` | Rust with Cargo |
+| `java` | Java 17 with Maven |
 
-Or build your own with `Template.build()`!
+Build custom templates with `Template.build()` for specific requirements.
 
-## 📖 Documentation
-
-- [Full Documentation](https://docs.hopx.ai)
-- [API Reference](https://docs.hopx.ai/python/api)
-- [Examples](https://github.com/hopx-ai/hopx/tree/main/python/examples)
-- [Cookbook](https://github.com/hopx-ai/hopx/tree/main/cookbook/python)
-
-## 🛠️ Advanced Features
+## Advanced Features
 
 ### Rich Output Capture
 
-Automatically capture charts, tables, and visualizations:
+Capture matplotlib charts and visualizations:
 
 ```python
 result = sandbox.run_code("""
@@ -370,10 +372,9 @@ plt.title('My Chart')
 plt.show()
 """)
 
-# Get PNG data
+# Access PNG data
 for output in result.rich_outputs:
     if output.type == "image/png":
-        # Save to file
         import base64
         with open("chart.png", "wb") as f:
             f.write(base64.b64decode(output.data))
@@ -391,10 +392,12 @@ for proc in processes:
 sandbox.processes.kill(1234)
 ```
 
-### Desktop Automation (Premium)
+### Desktop Automation
+
+Control sandboxes with graphical interfaces:
 
 ```python
-# Get VNC info
+# Get VNC connection info
 vnc = sandbox.desktop.get_vnc_info()
 print(f"Connect to: {vnc.url}")
 
@@ -408,12 +411,14 @@ sandbox.desktop.mouse_click(100, 200)
 sandbox.desktop.keyboard_type("Hello, World!")
 ```
 
-### Health & Metrics
+### Health and Metrics
+
+Monitor sandbox resource usage:
 
 ```python
 # Check health
 health = sandbox.get_health()
-print(health.status)  # "healthy"
+print(health.status)
 
 # Get metrics
 metrics = sandbox.get_metrics()
@@ -422,7 +427,7 @@ print(f"Memory: {metrics.memory_mb}MB")
 print(f"Disk: {metrics.disk_mb}MB")
 ```
 
-## 🤝 Error Handling
+## Error Handling
 
 ```python
 from hopx_ai import (
@@ -435,8 +440,8 @@ from hopx_ai import (
 
 try:
     sandbox = Sandbox.create(template="python")
-    result = sandbox.run_code("1/0")  # Will raise CodeExecutionError
-    
+    result = sandbox.run_code("1/0")
+
 except AuthenticationError:
     print("Invalid API key")
 except CodeExecutionError as e:
@@ -447,51 +452,61 @@ except HopxError as e:
     print(f"API error: {e.message}")
 ```
 
-## 💡 Best Practices
+## Best Practices
 
-1. **Always clean up**: Use context managers or call `.kill()` explicitly
-2. **Set timeouts**: Prevent runaway sandboxes with `timeout_seconds`
-3. **Handle errors**: Wrap code in try/except for production use
-4. **Use templates**: Pre-built templates are faster than custom ones
-5. **Batch operations**: Group related operations to reduce API calls
-6. **Monitor resources**: Check metrics if running long tasks
+**Resource management:**
+- Use context managers for automatic cleanup
+- Set `timeout_seconds` to prevent runaway sandboxes
+- Call `.kill()` explicitly when not using context managers
 
-## 🐛 Troubleshooting
+**Error handling:**
+- Wrap sandbox operations in try/except blocks
+- Check `result.success` before accessing output
+- Review `result.stderr` for error details
 
-**Sandbox creation timeout?**
-- Check your API key is valid
-- Verify network connectivity
-- Try a different region
+**Performance:**
+- Use pre-built templates when possible (faster than custom builds)
+- Group related operations to reduce API calls
+- Monitor resource usage for long-running tasks
 
-**Code execution fails?**
-- Check `result.stderr` for error messages
-- Ensure required packages are installed in sandbox
-- Verify file paths are correct
+## Troubleshooting
 
-**File not found?**
+**Sandbox creation fails:**
+- Verify API key is valid
+- Check network connectivity
+- Review error message for specific issue
+
+**Code execution errors:**
+- Check `result.stderr` for error details
+- Verify required packages are installed
+- Confirm file paths are correct
+
+**File not found errors:**
 - Use absolute paths (e.g., `/app/file.txt`)
-- Check file was uploaded successfully
-- Verify working directory
+- Verify file upload completed successfully
+- Check current working directory
 
-## 📄 License
+## Documentation
 
-MIT License - see [LICENSE](LICENSE) file for details.
+- [Full Documentation](https://docs.hopx.ai)
+- [API Reference](https://docs.hopx.ai/python/api)
+- [Examples](https://github.com/hopx-ai/hopx/tree/main/python/examples)
+- [Cookbook](https://github.com/hopx-ai/hopx/tree/main/cookbook/python)
 
-## 🔗 Links
-
-- [Website](https://hopx.ai)
-- [Documentation](https://docs.hopx.ai)
-- [Dashboard](https://hopx.ai/dashboard)
-- [GitHub](https://github.com/hopx-ai/hopx)
-- [Discord Community](https://discord.gg/hopx)
-- [Twitter](https://twitter.com/hopx_ai)
-
-## 🆘 Support
+## Support
 
 - Email: support@hopx.ai
 - Discord: [discord.gg/hopx](https://discord.gg/hopx)
-- Issues: [GitHub Issues](https://github.com/hopx-ai/hopx/issues)
+- GitHub Issues: [github.com/hopx-ai/hopx/issues](https://github.com/hopx-ai/hopx/issues)
 
----
+## License
 
-**Built with ❤️ by the Hopx team**
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## Links
+
+- [Website](https://hopx.ai)
+- [Dashboard](https://hopx.ai/dashboard)
+- [GitHub](https://github.com/hopx-ai/hopx)
+- [Discord](https://discord.gg/hopx)
+- [Twitter](https://twitter.com/hopx_ai)

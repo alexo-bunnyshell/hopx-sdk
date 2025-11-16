@@ -507,16 +507,25 @@ async def wait_for_template_active(
     max_wait_seconds: Optional[int] = None,
 ) -> None:
     """
-    Wait for template status to become "active".
+    Wait for template status to become "active" and stable.
 
     Templates must be "active" before they can be used to create sandboxes.
-    Polls GET /v1/templates/{id} until status="active".
+    Polls GET /v1/templates/{id} every 3 seconds until status="active" for
+    2 consecutive checks (6 seconds total).
+
+    Template lifecycle: building → publishing → active
+
+    Note: Templates may briefly show "active" status immediately after build,
+    but then transition to "publishing" for ~60-120s before becoming truly ready.
+    This function requires 2 consecutive "active" checks to ensure stability.
 
     Args:
         template_id: Template ID to monitor
         base_url: API base URL
         options: Build options
-        max_wait_seconds: Maximum wait time (default: 45 minutes, configurable via HOPX_MAX_TEMPLATE_WAIT)
+        max_wait_seconds: Maximum wait time (default: 2700 seconds / 45 minutes,
+                         configurable via HOPX_TEMPLATE_BAKE_SECONDS env var
+                         or BuildOptions.template_activation_timeout parameter)
 
     Raises:
         Exception: If template activation fails or times out
@@ -524,12 +533,15 @@ async def wait_for_template_active(
     async with aiohttp.ClientSession() as session:
         start_time = time.time()
         last_status = None
+        consecutive_active_count = 0
+        required_consecutive = 2  # Require 2 consecutive "active" checks
 
         # Priority: parameter > env var > default (45 minutes)
         if max_wait_seconds is None:
-            max_wait_seconds = int(os.environ.get('HOPX_MAX_TEMPLATE_WAIT', '2700'))  # 45 minutes
+            max_wait_seconds = int(os.environ.get('HOPX_TEMPLATE_BAKE_SECONDS', '2700'))
 
         max_wait = max_wait_seconds
+        poll_interval = 3  # Poll every 3 seconds to catch status transitions
 
         while time.time() - start_time < max_wait:
             try:
@@ -542,35 +554,53 @@ async def wait_for_template_active(
                         status = data.get('status', 'unknown')
                         is_active = data.get('is_active', False)
 
+                        # Log status changes
                         if status != last_status:
                             if options.on_log:
                                 options.on_log({'message': f'Template status: {status} (is_active: {is_active})'})
                             last_status = status
 
-                        # Check both status AND is_active flag
+                        # Check if template is active
                         if status == 'active' and is_active:
-                            if options.on_log:
-                                options.on_log({'message': f'✅ Template active (ID: {template_id})'})
-                            return
+                            consecutive_active_count += 1
 
+                            if consecutive_active_count == 1 and options.on_log:
+                                options.on_log({'message': f'Template active, verifying stability...'})
+
+                            # Return after 2 consecutive "active" checks
+                            if consecutive_active_count >= required_consecutive:
+                                if options.on_log:
+                                    options.on_log({'message': f'✅ Template active and stable (ID: {template_id})'})
+                                return
+                        else:
+                            # Status is not active (or regressed from active)
+                            if consecutive_active_count > 0:
+                                # Template regressed from active to another state (e.g., publishing)
+                                if options.on_log:
+                                    options.on_log({'message': f'Template status changed from active to {status}, continuing to wait...'})
+                                consecutive_active_count = 0  # Reset counter
+
+                        # Template build failed
                         if status in ('failed', 'error'):
                             error = data.get('error_message', 'Unknown error')
                             raise Exception(f"Template activation failed: {error}")
 
-                        # Continue polling for: building, publishing, pending
+                        # Continue polling for: building, publishing, pending, etc.
                     else:
                         error_text = await response.text()
-                        if time.time() - start_time > 60:  # Log every 1 min
+                        if time.time() - start_time > 60:  # Log errors after 1 min
                             if options.on_log:
                                 options.on_log({'message': f'Error checking template status ({response.status}): {error_text}'})
+                        consecutive_active_count = 0  # Reset on error
 
             except aiohttp.ClientError as e:
                 # Network errors - log but continue retrying
                 if time.time() - start_time > 60:  # Log after 1 min
                     if options.on_log:
                         options.on_log({'message': f'Network error polling template status, retrying...'})
+                consecutive_active_count = 0  # Reset on network error
 
-            await asyncio.sleep(2)
+            await asyncio.sleep(poll_interval)
 
         # Timeout reached
         minutes = max_wait / 60

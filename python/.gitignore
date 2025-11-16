@@ -43,3 +43,12 @@ htmlcov/
 test_live.py
 *.log
 
+# agents
+CLAUDE.md
+.claude/
+
+# avoid accidental garbage collection
+!README.md
+*.md
+test*.py
+check*.py
