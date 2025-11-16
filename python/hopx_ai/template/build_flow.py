@@ -547,17 +547,22 @@ async def wait_for_template_active(
                                 options.on_log({'message': f'Template status: {status} (is_active: {is_active})'})
                             last_status = status
 
-                        # CRITICAL: Check both status AND is_active flag
+                        # Check both status AND is_active flag
                         if status == 'active' and is_active:
                             if options.on_log:
                                 options.on_log({'message': f'✅ Template active (ID: {template_id})'})
                             return
 
-                        if status == 'failed':
+                        if status in ('failed', 'error'):
                             error = data.get('error_message', 'Unknown error')
                             raise Exception(f"Template activation failed: {error}")
 
                         # Continue polling for: building, publishing, pending
+                    else:
+                        error_text = await response.text()
+                        if time.time() - start_time > 60:  # Log every 1 min
+                            if options.on_log:
+                                options.on_log({'message': f'Error checking template status ({response.status}): {error_text}'})
 
             except aiohttp.ClientError as e:
                 # Network errors - log but continue retrying
@@ -569,7 +574,7 @@ async def wait_for_template_active(
 
         # Timeout reached
         minutes = max_wait / 60
-        raise Exception(
+        raise TimeoutError(
             f"Template {template_id} did not become active within {minutes:.0f} minutes. "
             f"Last status: {last_status or 'unknown'}. "
             f"This may indicate an API issue or the template is still processing."
