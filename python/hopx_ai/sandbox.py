@@ -2,7 +2,6 @@
 
 from typing import Optional, List, Iterator, Dict, Any
 from datetime import datetime, timedelta
-from dataclasses import dataclass
 import logging
 
 # Public API models (enhanced with generated models + convenience)
@@ -26,18 +25,27 @@ from .cache import Cache
 from ._ws_client import WebSocketClient
 from .terminal import Terminal
 
+# Shared utilities (reduce code duplication with AsyncSandbox)
+from ._token_cache import (
+    TokenData,
+    _token_cache,
+    store_token_from_response,
+    get_cached_token,
+)
+from ._parsers import (
+    _parse_sandbox_info_response,
+    _parse_rich_outputs,
+    _parse_template_response,
+    _parse_template_list_response,
+)
+from ._sandbox_utils import (
+    build_sandbox_create_payload,
+    build_list_sandboxes_params,
+    build_list_templates_params,
+    build_set_timeout_payload,
+)
+
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class TokenData:
-    """JWT token storage."""
-    token: str
-    expires_at: datetime
-
-
-# Global token cache (shared across all Sandbox instances)
-_token_cache: Dict[str, TokenData] = {}
 
 
 class Sandbox:
@@ -365,16 +373,13 @@ class Sandbox:
         Called automatically when token is about to expire (<1 hour left).
         """
         response = self._client.post(f"/v1/sandboxes/{self.sandbox_id}/token/refresh")
-        
-        if "auth_token" in response and "token_expires_at" in response:
-            _token_cache[self.sandbox_id] = TokenData(
-                token=response["auth_token"],
-                expires_at=datetime.fromisoformat(response["token_expires_at"].replace("Z", "+00:00"))
-            )
-            
-            # Update agent client's JWT token if already initialized
-            if self._agent_client is not None:
-                self._agent_client.update_jwt_token(response["auth_token"])
+
+        # Store token using shared utility function
+        store_token_from_response(self.sandbox_id, response)
+
+        # Update agent client's JWT token if already initialized
+        if self._agent_client is not None and "auth_token" in response:
+            self._agent_client.update_jwt_token(response["auth_token"])
     
     def _ensure_valid_token(self) -> None:
         """
@@ -480,46 +485,38 @@ class Sandbox:
         # Create HTTP client
         client = HTTPClient(api_key=api_key, base_url=base_url)
 
-        # Validate parameters
-        if template_id:
-            # Create from template ID (resources from template)
-            # Convert template_id to string if it's an int (API may return int from build)
-            data = remove_none_values({
-                "template_id": str(template_id),
-                "region": region,
-                "timeout_seconds": timeout_seconds,
-                "internet_access": internet_access,
-                "env_vars": env_vars,
-            })
-        elif template:
-            # Create from template name (resources from template)
-            data = remove_none_values({
-                "template_name": template,
-                "region": region,
-                "timeout_seconds": timeout_seconds,
-                "internet_access": internet_access,
-                "env_vars": env_vars,
-            })
-        else:
-            raise ValueError("Either 'template' or 'template_id' must be provided")
-        
+        # Build request payload using shared utility
+        data = build_sandbox_create_payload(
+            template=template,
+            template_id=template_id,
+            region=region,
+            timeout_seconds=timeout_seconds,
+            internet_access=internet_access,
+            env_vars=env_vars,
+        )
+
         # Create sandbox via API
         response = client.post("/v1/sandboxes", json=data)
         sandbox_id = response["id"]
-        
-        # ⚠️ NEW: Store JWT token from create response
-        if "auth_token" in response and "token_expires_at" in response:
-            _token_cache[sandbox_id] = TokenData(
-                token=response["auth_token"],
-                expires_at=datetime.fromisoformat(response["token_expires_at"].replace("Z", "+00:00"))
-            )
-        
-        # Return Sandbox instance
-        return cls(
+
+        # Store JWT token from create response using shared utility
+        store_token_from_response(sandbox_id, response)
+
+        # Create Sandbox instance
+        instance = cls(
             sandbox_id=sandbox_id,
             api_key=api_key,
             base_url=base_url,
         )
+
+        # Set environment variables if provided
+        # The API doesn't automatically set env_vars in the sandbox runtime,
+        # so we need to explicitly set them via the env API
+        if env_vars:
+            logger.debug(f"Setting {len(env_vars)} environment variables in sandbox")
+            instance.env.update(env_vars)
+
+        return instance
     
     @classmethod
     def debug(
@@ -780,35 +777,33 @@ class Sandbox:
     ) -> List[Template]:
         """
         List available templates.
-        
+
         Args:
             category: Filter by category (development, infrastructure, operating-system)
             language: Filter by language (python, nodejs, etc.)
             api_key: API key (or use HOPX_API_KEY env var)
             base_url: API base URL
-        
+
         Returns:
             List of Template objects
-        
+
         Example:
             >>> templates = Sandbox.list_templates()
             >>> for t in templates:
             ...     print(f"{t.name}: {t.display_name}")
-            
+
             >>> # Filter by category
             >>> dev_templates = Sandbox.list_templates(category="development")
         """
         client = HTTPClient(api_key=api_key, base_url=base_url)
-        
-        params = remove_none_values({
-            "category": category,
-            "language": language,
-        })
-        
+
+        # Build query params using shared utility
+        params = build_list_templates_params(category=category, language=language)
+
         response = client.get("/v1/templates", params=params)
-        templates_data = response.get("data", [])
-        
-        return [Template(**t) for t in templates_data]
+
+        # Parse response using shared utility
+        return _parse_template_list_response(response)
     
     @classmethod
     def get_template(
@@ -839,7 +834,9 @@ class Sandbox:
         """
         client = HTTPClient(api_key=api_key, base_url=base_url)
         response = client.get(f"/v1/templates/{name}")
-        return Template(**response)
+
+        # Parse response using shared utility
+        return _parse_template_response(response)
 
     @classmethod
     def delete_template(
@@ -936,54 +933,8 @@ class Sandbox:
         """
         response = self._client.get(f"/v1/sandboxes/{self.sandbox_id}")
 
-        # Parse resources if present
-        resources = None
-        if response.get("resources"):
-            from .models import Resources
-            resources = Resources(
-                vcpu=response["resources"]["vcpu"],
-                memory_mb=response["resources"]["memory_mb"],
-                disk_mb=response["resources"]["disk_mb"]
-            )
-
-        # Parse timestamps
-        created_at = None
-        if response.get("created_at"):
-            try:
-                from datetime import datetime
-                created_at = datetime.fromisoformat(response["created_at"].replace("Z", "+00:00"))
-            except (ValueError, AttributeError):
-                pass
-
-        expires_at = None
-        if response.get("expires_at"):
-            try:
-                from datetime import datetime
-                expires_at = datetime.fromisoformat(response["expires_at"].replace("Z", "+00:00"))
-            except (ValueError, AttributeError):
-                pass
-
-        return SandboxInfo(
-            sandbox_id=response["id"],
-            template_id=response.get("template_id"),
-            template_name=response.get("template_name"),
-            organization_id=response.get("organization_id", 0),
-            node_id=response.get("node_id"),
-            region=response.get("region"),
-            status=response["status"],
-            public_host=response.get("public_host") or response.get("direct_url", ""),
-            direct_url=response.get("direct_url"),
-            preview_url=response.get("preview_url"),
-            resources=resources,
-            internet_access=response.get("internet_access"),
-            live_mode=response.get("live_mode"),
-            timeout_seconds=response.get("timeout_seconds"),
-            expires_at=expires_at,
-            created_at=created_at,
-            # Legacy fields for backward compatibility
-            started_at=None,
-            end_at=expires_at,  # Map expires_at to end_at for backward compat
-        )
+        # Parse response using shared utility function
+        return _parse_sandbox_info_response(response)
     
     def get_agent_info(self) -> Dict[str, Any]:
         """
@@ -1215,47 +1166,10 @@ class Sandbox:
         )
         
         data = response.json() if response.content else {}
-        
-        # Parse rich outputs from Jupyter
-        # Agent returns: .png, .html, .json, .result directly in response
-        rich_outputs = []
-        if data and isinstance(data, dict):
-            # Check for PNG (Matplotlib)
-            if data.get("png"):
-                rich_outputs.append(RichOutput(
-                    type="image/png",
-                    data={"image/png": data["png"]},
-                    metadata=None,
-                    timestamp=None
-                ))
-            
-            # Check for HTML (Pandas, Plotly)
-            if data.get("html"):
-                rich_outputs.append(RichOutput(
-                    type="text/html",
-                    data={"text/html": data["html"]},
-                    metadata=None,
-                    timestamp=None
-                ))
-            
-            # Check for JSON (Plotly)
-            if data.get("json"):
-                rich_outputs.append(RichOutput(
-                    type="application/json",
-                    data={"application/json": data["json"]},
-                    metadata=None,
-                    timestamp=None
-                ))
-            
-            # Check for DataFrame JSON
-            if data.get("dataframe"):
-                rich_outputs.append(RichOutput(
-                    type="application/vnd.dataframe+json",
-                    data={"application/vnd.dataframe+json": data["dataframe"]},
-                    metadata=None,
-                    timestamp=None
-                ))
-        
+
+        # Parse rich outputs using shared utility function
+        rich_outputs = _parse_rich_outputs(data)
+
         # Create result
         result = ExecutionResult(
             success=data.get("success", True) if data else False,
@@ -1571,36 +1485,37 @@ class Sandbox:
     def set_timeout(self, seconds: int) -> None:
         """
         Extend sandbox timeout.
-        
+
         Sets a new timeout duration. The sandbox will be automatically terminated
         after the specified number of seconds from now.
-        
+
         Args:
             seconds: New timeout duration in seconds from now (must be > 0)
-        
+
         Example:
             >>> sandbox = Sandbox.create(template="nodejs", timeout_seconds=300)
             >>> # Extend to 10 minutes from now
             >>> sandbox.set_timeout(600)
-            >>> 
+            >>>
             >>> # Extend to 1 hour
             >>> sandbox.set_timeout(3600)
-        
+
         Raises:
             HopxError: If the API request fails
-        
+
         Note:
             This feature may not be available in all plans.
         """
         logger.debug(f"Setting timeout to {seconds}s for sandbox {self.sandbox_id}")
-        
-        payload = {"timeout_seconds": seconds}
-        
+
+        # Build payload using shared utility
+        payload = build_set_timeout_payload(seconds)
+
         self._client.put(
             f"/v1/sandboxes/{self.sandbox_id}/timeout",
             json=payload
         )
-        
+
         logger.info(f"Timeout updated to {seconds}s")
     
     def stop(self) -> None:

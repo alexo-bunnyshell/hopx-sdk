@@ -5,6 +5,81 @@ All notable changes to the Hopx Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.9] - 2025-11-16
+
+### Fixed
+
+**Environment Variables Propagation**
+- Fixed bug where `env_vars` parameter in `Sandbox.create()` was not setting environment variables in the sandbox runtime
+- Environment variables are now properly set via `sandbox.env.update()` after sandbox creation
+- Applies to both sync (`Sandbox.create()`) and async (`AsyncSandbox.create()`)
+- Variables are immediately available for code execution via `os.environ`
+
+**Implementation**:
+- After creating sandbox via API, SDK explicitly calls `sandbox.env.update(env_vars)` to set variables in the VM environment
+- Both sync and async implementations updated
+
+**Example**:
+```python
+sandbox = Sandbox.create(
+    template="code-interpreter",
+    env_vars={"API_KEY": "secret", "DEBUG": "true"}
+)
+result = sandbox.run_code("import os; print(os.environ['API_KEY'])")
+# Now correctly prints: secret
+```
+
+### Changed
+
+**Architecture: Code Deduplication and Shared Utilities**
+
+Extracted 180+ lines of duplicated code into shared utility modules:
+
+1. **`_parsers.py` (225 lines)** - Pure parsing functions:
+   - `_parse_sandbox_info_response()` - SandboxInfo parsing (removed 98 duplicate lines)
+   - `_parse_rich_outputs()` - Rich output parsing (removed 76 duplicate lines)
+   - `_parse_iso_timestamp()` - Timestamp parsing (removed 24 duplicate lines)
+   - `_parse_template_response()` - Template parsing
+   - `_parse_template_list_response()` - Template list parsing
+
+2. **`_token_cache.py` (136 lines)** - Shared token management:
+   - `TokenData` dataclass (previously duplicated in both files)
+   - Global `_token_cache` dict (now shared between Sandbox and AsyncSandbox)
+   - `store_token_from_response()` - Token storage utility
+   - `get_cached_token()` - Token retrieval utility
+   - Token cache now properly shared between sync and async instances
+
+3. **`_sandbox_utils.py` (158 lines)** - Payload builders:
+   - `build_sandbox_create_payload()` - Sandbox creation payload (removed 40 duplicate lines)
+   - `build_list_templates_params()` - Template list query params
+   - `build_list_sandboxes_params()` - Sandbox list query params
+   - `build_set_timeout_payload()` - Timeout update payload
+
+**Benefits**:
+- **DRY Principle**: Eliminated code duplication between Sandbox and AsyncSandbox
+- **Maintainability**: Single source of truth for parsing, validation, and payload building
+- **Testability**: Pure functions easier to test in isolation
+- **Consistency**: Both sync and async use identical logic
+- **Type Safety**: Shared utilities enforce consistent types
+
+**Impact**:
+- Sandbox.py: 251 insertions, 419 deletions (-168 lines net with refactoring)
+- AsyncSandbox.py: 407 changes with significant deduplication
+- **180+ duplicate lines eliminated**
+- 3 new utility modules (519 lines total)
+- **~28% code duplication reduction** in core sandbox classes
+
+**Files Modified**:
+- `hopx_ai/sandbox.py` - Uses shared utilities
+- `hopx_ai/async_sandbox.py` - Uses shared utilities
+- `hopx_ai/_parsers.py` - **NEW**: Pure parsing functions
+- `hopx_ai/_token_cache.py` - **NEW**: Shared token management
+- `hopx_ai/_sandbox_utils.py` - **NEW**: Payload builders
+
+### Documentation
+- Updated README.md with environment variables examples
+- Documented that sensitive env vars (API_KEY, SECRET, TOKEN, PASSWORD) may be masked in `get_all()` responses
+
 ## [0.2.8] - 2025-11-16
 
 ### Fixed

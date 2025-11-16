@@ -2,7 +2,7 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.6-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.2.9-blue.svg)](CHANGELOG.md)
 
 Official Python SDK for [Hopx.ai](https://hopx.ai) - Cloud sandboxes for AI agents and code execution.
 
@@ -255,16 +255,28 @@ processes = sandbox.list_system_processes()
 ### Environment Variables
 
 ```python
-# Set single variable
-sandbox.env.set("DATABASE_URL", "postgresql://...")
+# Set during creation (recommended)
+sandbox = Sandbox.create(
+    template="python",
+    env_vars={
+        "DATABASE_URL": "postgresql://...",
+        "API_KEY": "key123",
+        "DEBUG": "true"
+    }
+)
 
-# Set multiple variables
-sandbox.env.set_many({
-    "API_KEY": "key123",
-    "DEBUG": "true"
+# Variables are immediately available
+result = sandbox.run_code("import os; print(os.environ['API_KEY'])")
+
+# Set after creation
+sandbox.env.update({
+    "NODE_ENV": "production"
 })
 
-# Get variable
+# Get all variables
+all_vars = sandbox.env.get_all()
+
+# Get specific variable
 value = sandbox.env.get("API_KEY")
 
 # Delete variable
