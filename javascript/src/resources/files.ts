@@ -10,6 +10,9 @@ import type {
   EnhancedFileInfo,
 } from '../types/index.js';
 import { FileInfoImpl } from '../types/index.js';
+import FormData from 'form-data';
+import { readFile } from 'fs/promises';
+import { existsSync } from 'fs';
 
 export class Files {
   constructor(private client: HTTPClient) {}
@@ -96,11 +99,45 @@ export class Files {
   }
 
   /**
-   * Upload file (multipart)
+   * Upload file from local filesystem to sandbox
+   *
+   * Uses multipart form-data to upload binary files efficiently.
+   * Python reference: files.py lines 259-295
+   *
+   * @param localPath - Path to local file
+   * @param remotePath - Destination path in sandbox
+   *
+   * @throws FileNotFoundError if local file doesn't exist
+   * @throws FileOperationError if upload fails
+   *
+   * @example
+   * ```typescript
+   * // Upload local file to sandbox
+   * await sandbox.files.upload('./data.csv', '/workspace/data.csv');
+   *
+   * // Upload large file
+   * await sandbox.files.upload('./large.zip', '/workspace/large.zip');
+   * ```
    */
-  async upload(_localPath: string, _remotePath: string): Promise<void> {
-    // Note: Requires FormData implementation for actual file uploads
-    throw new Error('File upload not yet implemented - use write() for content');
+  async upload(localPath: string, remotePath: string): Promise<void> {
+    // Verify local file exists
+    if (!existsSync(localPath)) {
+      throw new Error(`Local file not found: ${localPath}`);
+    }
+
+    // Read file contents
+    const fileBuffer = await readFile(localPath);
+
+    // Create FormData with file and path
+    const form = new FormData();
+    form.append('file', fileBuffer, { filename: localPath.split('/').pop() || 'file' });
+    form.append('path', remotePath);
+
+    // Upload via multipart form-data
+    await this.client.post('/files/upload', form, {
+      headers: form.getHeaders(),
+      timeout: 60000, // 60 second default for uploads
+    });
   }
 
   /**

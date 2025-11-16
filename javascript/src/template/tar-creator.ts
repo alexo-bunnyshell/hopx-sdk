@@ -3,9 +3,8 @@
  */
 
 import * as tar from 'tar';
-import { createGzip } from 'zlib';
-import { createReadStream, createWriteStream } from 'fs';
-import { readFile, stat } from 'fs/promises';
+import { createReadStream } from 'fs';
+import { stat } from 'fs/promises';
 import { glob } from 'glob';
 import * as path from 'path';
 import * as os from 'os';

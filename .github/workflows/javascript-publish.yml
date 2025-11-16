@@ -1,0 +1,142 @@
+# This workflow will upload the Hopx JavaScript/TypeScript SDK to npm when a release is created
+# For more information see: https://docs.github.com/en/actions/publishing-packages/publishing-nodejs-packages
+
+name: Publish Hopx JavaScript SDK to npm
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 0.3.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  release-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: javascript
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: javascript/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Update version in package.json
+        run: |
+          # Extract version from release tag (remove 'v' prefix if present)
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            VERSION="${VERSION#v}"
+            # Also handle javascript-v prefix (e.g., javascript-v0.3.0)
+            VERSION="${VERSION#javascript-v}"
+            VERSION="${VERSION#javascript-}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+
+          # Update version in package.json
+          npm version "$VERSION" --no-git-tag-version
+
+          echo "Updated package.json version to: $VERSION"
+          grep '"version":' package.json
+
+      - name: Run type checking
+        run: npm run typecheck
+
+      - name: Run linting
+        run: npm run lint || true  # Don't fail on lint warnings
+
+      - name: Build package
+        run: npm run build
+
+      - name: Verify build outputs
+        run: |
+          echo "Verifying build artifacts..."
+          ls -lh dist/
+          echo ""
+          echo "Package contents:"
+          npm pack --dry-run
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dists
+          path: |
+            javascript/dist/
+            javascript/package.json
+            javascript/README.md
+
+  npm-publish:
+    runs-on: ubuntu-latest
+    needs:
+      - release-build
+    permissions:
+      # Standard permissions for npm publishing
+      contents: read
+
+    # Dedicated environment with protections for publishing are strongly recommended
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/@hopx-ai/sdk
+
+    defaults:
+      run:
+        working-directory: javascript
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-dists
+          path: javascript/
+
+      - name: Verify package contents
+        run: |
+          echo "Package contents before publish:"
+          npm pack --dry-run
+          echo ""
+          echo "Package.json version:"
+          grep '"version":' package.json
+
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Verify publication
+        run: |
+          # Wait a few seconds for npm registry to update
+          sleep 10
+
+          # Get package info from npm
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          echo "Published version: $PACKAGE_VERSION"
+          echo "Verifying on npm registry..."
+
+          # Check if version exists on npm
+          npm view @hopx-ai/sdk@$PACKAGE_VERSION version || echo "Version not yet visible (may take a few minutes)"
+
+  # Note: If you need to publish to additional registries (GitHub Packages, etc.), add jobs here

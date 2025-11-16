@@ -10,6 +10,7 @@ import { EnvironmentVariables } from './resources/env-vars.js';
 import { Cache } from './resources/cache.js';
 import { Desktop } from './resources/desktop.js';
 import { Terminal } from './resources/terminal.js';
+import { HopxError } from './errors.js';
 import type {
   SandboxCreateOptions,
   TemplateInfo,
@@ -44,7 +45,7 @@ export class Sandbox {
   private publicClient: HTTPClient;
   private agentClient?: HTTPClient;
   private wsClient?: WSClient;
-  private agentUrl?: string;
+  private _agentUrl?: string;
   private apiKey?: string;
   
   // Resources (lazy-loaded)
@@ -133,7 +134,7 @@ export class Sandbox {
     }
 
     const sandbox = new Sandbox(sandboxId, apiKey, options.baseURL);
-    
+
     // ⚠️ NEW: Store JWT token from create response
     if (response.auth_token && response.token_expires_at) {
       tokenCache.set(sandboxId, {
@@ -141,11 +142,18 @@ export class Sandbox {
         expiresAt: new Date(response.token_expires_at),
       });
     }
-    
+
     // Auto-initialize agent client by calling getInfo()
     // This fetches public_host and sets up the agent client
     await sandbox.getInfo();
-    
+
+    // ✅ CRITICAL: Propagate env_vars to sandbox runtime
+    // The API doesn't automatically set env_vars in the runtime environment.
+    // We must explicitly set them via the Agent API after sandbox creation.
+    if (options.envVars && Object.keys(options.envVars).length > 0) {
+      await sandbox.env.update(options.envVars);
+    }
+
     return sandbox;
   }
 
@@ -202,6 +210,69 @@ export class Sandbox {
   }
 
   /**
+   * Lazy iterator for sandboxes using cursor pagination
+   *
+   * Yields sandboxes one by one, fetching pages as needed.
+   * Doesn't load all sandboxes into memory at once.
+   *
+   * Python reference: sandbox.py lines 652-711
+   *
+   * @param options - Filter options
+   * @returns AsyncGenerator yielding Sandbox instances
+   *
+   * @example
+   * ```typescript
+   * // Lazy loading - fetches pages as needed
+   * for await (const sandbox of Sandbox.iter({ status: 'running' })) {
+   *   console.log(sandbox.sandboxId);
+   *   if (found) {
+   *     break;  // Doesn't fetch remaining pages!
+   *   }
+   * }
+   * ```
+   */
+  static async *iter(options?: {
+    status?: 'running' | 'stopped' | 'paused' | 'creating';
+    region?: string;
+    apiKey?: string;
+    baseURL?: string;
+  }): AsyncGenerator<Sandbox> {
+    const apiKey = options?.apiKey || process.env['HOPX_API_KEY'];
+    const baseURL = options?.baseURL ?? 'https://api.hopx.dev';
+
+    const client = new HTTPClient({
+      baseURL,
+      apiKey,
+      timeout: 60000,
+      maxRetries: 3,
+    });
+
+    let hasMore = true;
+    let cursor: string | null = null;
+    const limit = 100;
+
+    while (hasMore) {
+      const params = new URLSearchParams();
+      params.append('limit', limit.toString());
+      if (options?.status) params.append('status', options.status);
+      if (options?.region) params.append('region', options.region);
+      if (cursor) params.append('cursor', cursor);
+
+      const query = params.toString() ? `?${params.toString()}` : '';
+      const response = await client.get<any>(`/v1/sandboxes${query}`);
+
+      const sandboxes = response.data || [];
+      for (const item of sandboxes) {
+        const sandboxId = item.id || item.sandbox_id;
+        yield new Sandbox(sandboxId, apiKey, baseURL);
+      }
+
+      hasMore = response.has_more ?? false;
+      cursor = response.next_cursor ?? null;
+    }
+  }
+
+  /**
    * List all sandboxes
    * API key can be provided via options.apiKey or HOPX_API_KEY environment variable
    */
@@ -213,7 +284,7 @@ export class Sandbox {
     region?: string;
   } = {}): Promise<SandboxInfo[]> {
     const apiKey = options.apiKey || process.env['HOPX_API_KEY'];
-    
+
     const client = new HTTPClient({
       baseURL: options.baseURL ?? 'https://api.hopx.dev',
       apiKey,
@@ -315,7 +386,7 @@ export class Sandbox {
     baseURL?: string;
   } = {}): Promise<TemplateInfo> {
     const apiKey = options.apiKey || process.env['HOPX_API_KEY'];
-    
+
     const client = new HTTPClient({
       baseURL: options.baseURL ?? 'https://api.hopx.dev',
       apiKey,
@@ -355,6 +426,74 @@ export class Sandbox {
       isActive: response.is_active,
       status: response.status,  // ✅ NEW: Template status field
     };
+  }
+
+  /**
+   * Delete a custom template
+   *
+   * Only organization-owned templates can be deleted. Public templates cannot be deleted.
+   *
+   * Python reference: sandbox.py lines 842-874
+   *
+   * @param templateId - Template ID to delete
+   * @param options - API configuration options
+   * @returns Deletion confirmation response
+   *
+   * @example
+   * ```typescript
+   * // Delete a custom template by ID
+   * const result = await Sandbox.deleteTemplate('template_123abc');
+   * console.log(result);
+   * ```
+   */
+  static async deleteTemplate(
+    templateId: string,
+    options?: { apiKey?: string; baseURL?: string }
+  ): Promise<any> {
+    const apiKey = options?.apiKey || process.env['HOPX_API_KEY'];
+
+    const client = new HTTPClient({
+      baseURL: options?.baseURL ?? 'https://api.hopx.dev',
+      apiKey,
+      timeout: 60000,
+      maxRetries: 3,
+    });
+
+    return await client.delete<any>(`/v1/templates/${templateId}`);
+  }
+
+  /**
+   * Check API health status
+   *
+   * This endpoint does not require authentication and can be used to verify
+   * API availability and connectivity.
+   *
+   * Python reference: sandbox.py lines 877-909
+   *
+   * @param baseURL - API base URL (default: production)
+   * @returns Health status information
+   *
+   * @example
+   * ```typescript
+   * // Check production API health
+   * const health = await Sandbox.healthCheck();
+   * console.log(health);  // { status: 'ok', ... }
+   *
+   * // Check custom/staging API
+   * const health = await Sandbox.healthCheck('https://staging-api.hopx.dev');
+   * ```
+   */
+  static async healthCheck(baseURL?: string): Promise<HealthResponse> {
+    const url = `${(baseURL ?? 'https://api.hopx.dev').replace(/\/$/, '')}/health`;
+
+    try {
+      // Use axios directly without authentication for health check
+      const axios = (await import('axios')).default;
+      const response = await axios.get(url, { timeout: 10000 });
+      return response.data;
+    } catch (error: any) {
+      throw new HopxError(`Health check failed: ${error.message}`);
+    }
   }
 
   // ==========================================================================
@@ -418,7 +557,7 @@ export class Sandbox {
     
     // Initialize agent client if we have the public_host
     if (response.public_host && !this.agentClient) {
-      this.agentUrl = response.public_host;
+      this._agentUrl = response.public_host;
       
       // Get JWT token for agent authentication
       let jwtToken: string | undefined;
@@ -431,7 +570,7 @@ export class Sandbox {
       }
       
       this.agentClient = new HTTPClient({
-        baseURL: this.agentUrl,
+        baseURL: this._agentUrl,
         apiKey: this.apiKey,
         timeout: 60000,
         maxRetries: 3,
@@ -443,23 +582,96 @@ export class Sandbox {
           return tokenData?.token || null;
         },
       });
-      this.wsClient = new WSClient(this.agentUrl, jwtToken);
+      this.wsClient = new WSClient(this._agentUrl, jwtToken);
     }
     
     // Resources are under .resources in API response
     const resources = response.resources || {};
-    
+
     return {
       sandboxId: response.id || response.sandbox_id,
       templateName: response.template_name,
+      templateId: response.template_id,
+      organizationId: response.organization_id,
+      nodeId: response.node_id,
+      region: response.region,
       status: response.status,
       publicHost: response.public_host,
+      directUrl: response.direct_url,
+      previewUrl: response.preview_url,
+      resources: resources.vcpu || resources.memory_mb || resources.disk_mb ? {
+        vcpu: resources.vcpu,
+        memoryMb: resources.memory_mb,
+        diskMb: resources.disk_mb,
+      } : undefined,
+      internetAccess: response.internet_access,
+      liveMode: response.live_mode,
+      timeoutSeconds: response.timeout_seconds,
+      expiresAt: response.expires_at,
       createdAt: response.created_at,
-      // Map from .resources object
+      startedAt: response.started_at,
+      endAt: response.end_at,
+      // Deprecated flat resource fields (for backward compatibility)
       vcpu: resources.vcpu,
       memoryMb: resources.memory_mb,
-      diskGb: resources.disk_gb ? Math.round(resources.disk_gb / 1024) : undefined, // disk_mb to disk_gb
+      diskGb: resources.disk_mb ? Math.round(resources.disk_mb / 1024) : undefined,
     };
+  }
+
+  /**
+   * Get preview URL for accessing services running on a specific port in the sandbox
+   *
+   * Hopx automatically exposes all ports from sandboxes via public URLs.
+   * URL format: https://{PORT}-{sandbox_id}.{region}.vms.hopx.dev/
+   *
+   * @param port - Port number (default: 7777, the agent port)
+   * @returns Public URL for accessing the service
+   *
+   * @example
+   * ```typescript
+   * const sandbox = await Sandbox.create({ template: 'code-interpreter' });
+   *
+   * // Get URL for service on port 8080
+   * const appUrl = await sandbox.getPreviewUrl(8080);
+   * // Returns: "https://8080-176329715051artmzu.eu-1001.vms.hopx.dev/"
+   *
+   * // Get agent URL (port 7777)
+   * const agentUrl = await sandbox.getPreviewUrl(7777);
+   * ```
+   */
+  async getPreviewUrl(port: number = 7777): Promise<string> {
+    const info = await this.getInfo();
+    const publicHost = info.publicHost;
+
+    if (!publicHost) {
+      throw new HopxError('Sandbox does not have a public host URL');
+    }
+
+    // Remove protocol and trailing slash
+    const host = publicHost.replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+    // Pattern 1: {port}-{sandbox_id}.{region}.vms.hopx.dev
+    const match = host.match(/^(?:\d+-)?([^.]+)\.(.+\.vms\.hopx\.dev)$/);
+    if (match) {
+      const [, sandboxPart, domainPart] = match;
+      return `https://${port}-${sandboxPart}.${domainPart}/`;
+    }
+
+    throw new HopxError(`Unable to determine preview URL from: ${publicHost}`);
+  }
+
+  /**
+   * Convenience property for getting the agent URL (port 7777)
+   *
+   * @example
+   * ```typescript
+   * const sandbox = await Sandbox.create({ template: 'nodejs' });
+   * const agentUrl = await sandbox.agentUrl;
+   * // Returns: "https://7777-176329715051artmzu.eu-1001.vms.hopx.dev/"
+   * ```
+   */
+  get agentUrl(): Promise<string> {
+    return this.getPreviewUrl(7777);
   }
 
   async kill(): Promise<void> {
@@ -492,6 +704,36 @@ export class Sandbox {
    */
   async resume(): Promise<void> {
     await this.publicClient.post(`/v1/sandboxes/${this.sandboxId}/resume`);
+  }
+
+  /**
+   * Set sandbox auto-kill timeout
+   *
+   * Sets a new timeout duration. The sandbox will be automatically terminated
+   * after the specified number of seconds from now.
+   *
+   * Python reference: sandbox.py lines 1578-1612
+   *
+   * @param timeoutSeconds - New timeout duration in seconds from now (must be > 0)
+   *
+   * @example
+   * ```typescript
+   * const sandbox = await Sandbox.create({ template: 'nodejs', timeoutSeconds: 300 });
+   *
+   * // Extend to 10 minutes from now
+   * await sandbox.setTimeout(600);
+   *
+   * // Extend to 1 hour
+   * await sandbox.setTimeout(3600);
+   * ```
+   */
+  async setTimeout(timeoutSeconds: number): Promise<void> {
+    if (timeoutSeconds <= 0) {
+      throw new Error('Timeout must be greater than 0');
+    }
+
+    const payload = { timeout_seconds: timeoutSeconds };
+    await this.publicClient.put(`/v1/sandboxes/${this.sandboxId}/timeout`, payload);
   }
 
   // ==========================================================================
@@ -609,6 +851,54 @@ export class Sandbox {
     return response.processes;
   }
 
+  /**
+   * List all running system processes in the sandbox
+   *
+   * Returns a list of all processes running in the VM, not just background
+   * code executions. Useful for debugging and monitoring system state.
+   *
+   * Python reference: sandbox.py lines 1110-1143
+   *
+   * @returns List of process information objects
+   *
+   * @example
+   * ```typescript
+   * const processes = await sandbox.listSystemProcesses();
+   * for (const proc of processes) {
+   *   console.log(`${proc.pid}: ${proc.name} (CPU: ${proc.cpu_percent || 0}%)`);
+   * }
+   * ```
+   */
+  async listSystemProcesses(): Promise<ProcessInfo[]> {
+    await this.ensureAgentClient();
+    const response = await this.agentClient!.get<{ processes: ProcessInfo[] }>('/processes');
+    return response.processes || [];
+  }
+
+  /**
+   * Get Jupyter kernel session status
+   *
+   * Returns information about active Jupyter kernel sessions, useful for
+   * debugging kernel state and managing long-running Python executions.
+   *
+   * Python reference: sandbox.py lines 1145-1176
+   *
+   * @returns List of active Jupyter sessions
+   *
+   * @example
+   * ```typescript
+   * const sessions = await sandbox.getJupyterSessions();
+   * for (const session of sessions) {
+   *   console.log(`Kernel ${session.kernel_id}: ${session.execution_state}`);
+   * }
+   * ```
+   */
+  async getJupyterSessions(): Promise<any[]> {
+    await this.ensureAgentClient();
+    const response = await this.agentClient!.get<{ sessions: any[] }>('/jupyter/sessions');
+    return response.sessions || [];
+  }
+
   async killProcess(processId: string): Promise<void> {
     await this.ensureAgentClient();
     await this.agentClient!.post(`/execute/kill/${processId}`);
@@ -619,6 +909,29 @@ export class Sandbox {
   // ==========================================================================
 
   async getMetricsSnapshot(): Promise<MetricsSnapshot> {
+    await this.ensureAgentClient();
+    return this.agentClient!.get<MetricsSnapshot>('/metrics/snapshot');
+  }
+
+  /**
+   * Get real-time agent metrics
+   *
+   * Returns agent performance and health metrics including uptime,
+   * request counts, error counts, and performance statistics.
+   *
+   * Python reference: sandbox.py lines 1075-1108
+   *
+   * @returns Metrics including uptime, requests, errors, and performance stats
+   *
+   * @example
+   * ```typescript
+   * const metrics = await sandbox.getAgentMetrics();
+   * console.log(`Uptime: ${metrics.uptime_seconds}s`);
+   * console.log(`Total requests: ${metrics.total_requests || 0}`);
+   * console.log(`Errors: ${metrics.total_errors || 0}`);
+   * ```
+   */
+  async getAgentMetrics(): Promise<MetricsSnapshot> {
     await this.ensureAgentClient();
     return this.agentClient!.get<MetricsSnapshot>('/metrics/snapshot');
   }

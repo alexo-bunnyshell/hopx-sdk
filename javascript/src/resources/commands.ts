@@ -10,30 +10,53 @@ export class Commands {
 
   /**
    * Run shell command
+   *
+   * ALL commands (sync and background) are automatically wrapped in `bash -c` for
+   * proper shell feature support (pipes, redirects, variables, etc.)
+   *
+   * Python reference: _base_commands.py - both sync and background use bash wrapper
    */
   async run(command: string, options?: CommandOptions): Promise<CommandResponse> {
+    // ✅ CRITICAL: Wrap ALL commands (sync + background) in bash for shell features
+    // This matches Python SDK behavior exactly
+    const payload: any = {
+      command: 'bash',
+      args: ['-c', command],
+      timeout: options?.timeout || (options?.background ? 60 : 30),
+      working_dir: options?.workingDir || '/workspace',
+    };
+
+    if (options?.env) {
+      payload.env = options.env;
+    }
+
     const response = await this.client.post<CommandResponse>(
       options?.background ? '/commands/background' : '/commands/run',
-      {
-        command,
-        timeout: options?.timeout ?? 30,
-        working_dir: options?.workingDir ?? '/workspace',
-        env: options?.env,
-      }
+      payload
     );
     return response;
   }
 
   /**
    * Run command in background
+   *
+   * Commands are automatically wrapped in `bash -c` for proper shell feature support
+   * (pipes, redirects, variables, etc.)
    */
   async runBackground(command: string, options?: Omit<CommandOptions, 'background'>): Promise<{ process_id: string }> {
-    const response = await this.client.post<{ process_id: string }>('/commands/background', {
-      command,
-      timeout: options?.timeout ?? 300,
-      working_dir: options?.workingDir ?? '/workspace',
-      env: options?.env,
-    });
+    // ✅ CRITICAL: Wrap command in bash for shell features
+    const payload: any = {
+      command: 'bash',
+      args: ['-c', command],
+      timeout: options?.timeout || 60,
+      working_dir: options?.workingDir || '/workspace',
+    };
+
+    if (options?.env) {
+      payload.env = options.env;
+    }
+
+    const response = await this.client.post<{ process_id: string }>('/commands/background', payload);
     return response;
   }
 }

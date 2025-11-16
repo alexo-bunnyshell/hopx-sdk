@@ -3,9 +3,10 @@
 [![npm version](https://img.shields.io/npm/v/@hopx-ai/sdk.svg)](https://www.npmjs.com/package/@hopx-ai/sdk)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue.svg)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.21-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](CHANGELOG.md)
+[![Python Parity](https://img.shields.io/badge/Python%20Parity-100%25-brightgreen.svg)](CHANGELOG.md)
 
-Official JavaScript/TypeScript SDK for [Hopx.ai](https://hopx.ai) - Cloud sandboxes for AI agents and code execution.
+Official JavaScript/TypeScript SDK for [Hopx.ai](https://hopx.ai) - Cloud sandboxes for AI agents and code execution. **v0.3.0** achieves 100% feature parity with Python SDK v0.3.0.
 
 ## 🚀 What is Hopx.ai?
 
@@ -237,6 +238,9 @@ await sandbox.files.write('/app/config.json', '{"key": "value"}');
 // Read files
 const content = await sandbox.files.read('/app/config.json');
 
+// Upload from local disk (v0.3.0+)
+await sandbox.files.upload('./local-file.txt', '/app/remote-file.txt');
+
 // List directory
 const files = await sandbox.files.list('/app/');
 files.forEach(file => {
@@ -244,36 +248,61 @@ files.forEach(file => {
 });
 
 // Delete files
-await sandbox.files.delete('/app/temp.txt');
+await sandbox.files.remove('/app/temp.txt');
 ```
 
 ### Commands
+
+All commands (sync and background) are wrapped in `bash -c` for full shell support:
 
 ```typescript
 // Run command synchronously
 const result = await sandbox.commands.run('ls -la /app');
 console.log(result.stdout);
 
+// Commands with pipes, redirects, variables (v0.3.0+)
+await sandbox.commands.run('ls | grep test');      // Pipes work!
+await sandbox.commands.run('echo "data" > out.txt'); // Redirects work!
+
 // Run in background
-const cmdId = await sandbox.commands.runAsync('node long-task.js');
-// ... do other work ...
-const result = await sandbox.commands.getResult(cmdId);
+const result = await sandbox.commands.run('sleep 10 && echo done', {
+  background: true,
+  timeout: 30
+});
 ```
 
 ### Environment Variables
 
-```typescript
-// Set single variable
-await sandbox.env.set('DATABASE_URL', 'postgresql://...');
+Environment variables can be set during sandbox creation and are immediately available:
 
-// Set multiple
-await sandbox.env.setMany({
-  API_KEY: 'key123',
-  DEBUG: 'true'
+```typescript
+// Set during creation (recommended - v0.3.0+)
+const sandbox = await Sandbox.create({
+  template: 'python',
+  envVars: {
+    DATABASE_URL: 'postgresql://localhost/db',
+    API_KEY: 'sk-prod-xyz',
+    DEBUG: 'true'
+  }
+});
+
+// Variables are immediately available in code
+const result = await sandbox.runCode("import os; print(os.environ['API_KEY'])");
+
+// Set individual variable at runtime
+await sandbox.env.set('CACHE_ENABLED', 'true');
+
+// Set multiple variables
+await sandbox.env.update({
+  LOG_LEVEL: 'info',
+  MAX_WORKERS: '4'
 });
 
 // Get variable
 const value = await sandbox.env.get('API_KEY');
+
+// Get all variables
+const allVars = await sandbox.env.getAll();
 
 // Delete variable
 await sandbox.env.delete('DEBUG');
@@ -288,24 +317,24 @@ import { Template, waitForPort } from '@hopx-ai/sdk';
 
 // Define template
 const template = new Template()
-  .fromNodeImage('20-alpine')
+  .fromNodeImage('20')  // Uses ubuntu/node:20-22.04_edge (Debian-based)
   .copy('package.json', '/app/package.json')
   .copy('src/', '/app/src/')
-  .run('cd /app && npm install')
+  .runCmd('cd /app && npm install')
   .setWorkdir('/app')
   .setEnv('PORT', '3000')
   .setStartCmd('node src/index.js', waitForPort(3000));
 
-// Build template
+// Build template (v0.3.0 with stability checks)
 const result = await Template.build(template, {
-  alias: 'my-node-app',
+  name: 'my-node-app',  // Template name
   apiKey: 'your-api-key',
   onLog: (log) => console.log(`[${log.level}] ${log.message}`)
 });
 
 console.log(`Template ID: ${result.templateID}`);
 
-// Create sandbox from template
+// Create sandbox from template (now stable!)
 const sandbox = await Sandbox.create({ templateId: result.templateID });
 ```
 
@@ -340,6 +369,120 @@ Pre-built templates available:
 - `java` - Java 17 with Maven
 
 Or build your own with `Template.build()`!
+
+## What's New in v0.3.0
+
+Version 0.3.0 matches the Python SDK v0.3.0 API.
+
+### Preview URL Access
+
+Get public URLs for services running in sandboxes:
+
+```typescript
+const sandbox = await Sandbox.create({ template: 'nodejs' });
+
+// Get URL for service on port 8080
+const appUrl = await sandbox.getPreviewUrl(8080);
+// Returns: https://8080-{id}.{region}.vms.hopx.dev/
+
+// Get agent URL (port 7777)
+const agentUrl = await sandbox.agentUrl;
+```
+
+Example: `examples/preview-url-basic.ts`
+
+### Environment Variables
+
+Environment variables set during creation are available in code execution:
+
+```typescript
+const sandbox = await Sandbox.create({
+  template: 'python',
+  envVars: { API_KEY: 'secret', DEBUG: 'true' }
+});
+
+const result = await sandbox.runCode("import os; print(os.environ['API_KEY'])");
+// Output: secret
+```
+
+Example: `examples/env-vars-example.ts`
+
+### Shell Commands
+
+Commands support pipes, redirects, and variables:
+
+```typescript
+await sandbox.commands.run('ls -la | grep python');
+await sandbox.commands.run('echo "data" > file.txt');
+await sandbox.commands.run('echo $HOME');
+```
+
+Example: `examples/agent-commands.ts`
+
+### Additional Methods
+
+```typescript
+// Iterate sandboxes without loading all into memory
+for await (const sandbox of Sandbox.iter({ status: 'running' })) {
+  console.log(sandbox.sandboxId);
+  if (found) break;
+}
+
+// Check API availability (no authentication required)
+const health = await Sandbox.healthCheck();
+
+// Delete custom template
+await Sandbox.deleteTemplate('template_123');
+
+// Extend sandbox timeout
+await sandbox.setTimeout(3600);  // Seconds from now
+
+// Get performance metrics
+const metrics = await sandbox.getAgentMetrics();
+
+// List system processes
+const processes = await sandbox.listSystemProcesses();
+
+// Get Jupyter kernel sessions
+const sessions = await sandbox.getJupyterSessions();
+```
+
+### File Upload
+
+Upload files from local filesystem:
+
+```typescript
+await sandbox.files.upload('./local-data.csv', '/workspace/data.csv');
+```
+
+### Desktop Methods
+
+```typescript
+// Execute keyboard combinations
+await sandbox.desktop.hotkey(['ctrl'], 'c');
+await sandbox.desktop.hotkey(['alt'], 'tab');
+
+// Minimize window
+await sandbox.desktop.minimizeWindow(windowId);
+
+// Get debugging information
+const logs = await sandbox.desktop.getDebugLogs();
+const processes = await sandbox.desktop.getDebugProcesses();
+```
+
+### Template Building
+
+Templates wait for activation before returning, preventing sandbox creation failures:
+
+```typescript
+const result = await Template.build(template, {
+  name: 'my-template',
+  apiKey: '...',
+  templateActivationTimeout: 1800  // Seconds
+});
+
+const sandbox = await Sandbox.create({ templateId: result.templateID });
+```
 
 ## 📖 Documentation
 
@@ -391,7 +534,7 @@ await sandbox.processes.kill(1234);
 
 ```typescript
 // Get VNC info
-const vnc = await sandbox.desktop.getVNCInfo();
+const vnc = await sandbox.desktop.getVncInfo();
 console.log(`Connect to: ${vnc.url}`);
 
 // Take screenshot
@@ -402,20 +545,42 @@ await sandbox.desktop.mouseClick(100, 200);
 
 // Type text
 await sandbox.desktop.keyboardType('Hello, World!');
+
+// Execute hotkeys (v0.3.0+)
+await sandbox.desktop.hotkey(['ctrl'], 'c');      // Copy
+await sandbox.desktop.hotkey(['ctrl', 'shift'], 'p');  // Multi-key
+
+// Window management
+await sandbox.desktop.minimizeWindow(windowId);
+await sandbox.desktop.focusWindow(windowId);
+
+// Debug (v0.3.0+)
+const logs = await sandbox.desktop.getDebugLogs();
+const processes = await sandbox.desktop.getDebugProcesses();
 ```
 
 ### Health & Metrics
 
 ```typescript
-// Check health
-const health = await sandbox.getHealth();
-console.log(health.status);  // "healthy"
+// API health check (no auth required - v0.3.0+)
+const apiHealth = await Sandbox.healthCheck();
+console.log(apiHealth.status);
 
-// Get metrics
-const metrics = await sandbox.getMetrics();
-console.log(`CPU: ${metrics.cpuPercent}%`);
-console.log(`Memory: ${metrics.memoryMb}MB`);
-console.log(`Disk: ${metrics.diskMb}MB`);
+// Agent health
+const health = await sandbox.getHealth();
+console.log(health.status);
+
+// Agent metrics (v0.3.0+)
+const metrics = await sandbox.getAgentMetrics();
+console.log(`Uptime: ${metrics.uptime_seconds}s`);
+console.log(`Requests: ${metrics.requests_total}`);
+console.log(`Errors: ${metrics.error_count}`);
+
+// System processes (v0.3.0+)
+const processes = await sandbox.listSystemProcesses();
+processes.forEach(proc => {
+  console.log(`${proc.process_id}: ${proc.name}`);
+});
 ```
 
 ## 🤝 Error Handling

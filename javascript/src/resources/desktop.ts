@@ -224,5 +224,82 @@ export class Desktop {
     });
     return Buffer.from(response);
   }
+
+  /**
+   * Execute hotkey combination (e.g., Ctrl+C, Alt+Tab)
+   *
+   * Python reference: desktop.py lines 1224-1262
+   *
+   * @param modifiers - List of modifier keys (e.g., ["ctrl", "shift"])
+   * @param key - Main key to press (e.g., "c", "tab")
+   *
+   * @example
+   * ```typescript
+   * // Copy: Ctrl+C
+   * await sandbox.desktop.hotkey(['ctrl'], 'c');
+   *
+   * // Paste: Ctrl+V
+   * await sandbox.desktop.hotkey(['ctrl'], 'v');
+   *
+   * // Switch window: Alt+Tab
+   * await sandbox.desktop.hotkey(['alt'], 'tab');
+   *
+   * // Screenshot: Ctrl+Shift+P
+   * await sandbox.desktop.hotkey(['ctrl', 'shift'], 'p');
+   * ```
+   */
+  async hotkey(modifiers: string[], key: string): Promise<void> {
+    await this.client.post('/desktop/x11/hotkey', {
+      modifiers,
+      key,
+    });
+  }
+
+  // ==========================================================================
+  // DEBUG
+  // ==========================================================================
+
+  /**
+   * Get desktop automation debug logs
+   *
+   * Returns debug logs from the desktop automation system, useful for
+   * troubleshooting automation issues.
+   *
+   * Python reference: desktop.py lines 1263-1289
+   *
+   * @returns List of log lines
+   *
+   * @example
+   * ```typescript
+   * const logs = await sandbox.desktop.getDebugLogs();
+   * console.log(logs.slice(-10));  // Last 10 lines
+   * ```
+   */
+  async getDebugLogs(): Promise<string[]> {
+    const response = await this.client.get<{ logs: string[] }>('/desktop/debug/logs');
+    return response.logs || [];
+  }
+
+  /**
+   * Get desktop-related processes for debugging
+   *
+   * Returns information about X11 and desktop-related processes.
+   *
+   * Python reference: desktop.py lines 1291-1320
+   *
+   * @returns List of process information objects (pid, name, command)
+   *
+   * @example
+   * ```typescript
+   * const processes = await sandbox.desktop.getDebugProcesses();
+   * for (const proc of processes) {
+   *   console.log(`${proc.pid}: ${proc.name}`);
+   * }
+   * ```
+   */
+  async getDebugProcesses(): Promise<Array<{ pid: number; name: string; command: string }>> {
+    const response = await this.client.get<{ processes: Array<any> }>('/desktop/debug/processes');
+    return response.processes || [];
+  }
 }
 

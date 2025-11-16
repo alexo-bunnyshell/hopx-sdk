@@ -606,62 +606,101 @@ async function waitForTemplateActive(
   templateID: string,
   baseURL: string,
   options: BuildOptions,
-  maxWaitSeconds: number = 60
+  maxWaitSeconds?: number
 ): Promise<void> {
+  // Default timeout: 2700 seconds (45 minutes), configurable via env var or options
+  const defaultTimeout = parseInt(process.env['HOPX_TEMPLATE_BAKE_SECONDS'] || '2700', 10);
+  const maxWait = (maxWaitSeconds || options.templateActivationTimeout || defaultTimeout) * 1000;
+
   const startTime = Date.now();
-  
-  while (Date.now() - startTime < maxWaitSeconds * 1000) {
+  let consecutiveActiveCount = 0;
+  const requiredConsecutive = 2;  // KEY: Require 2 consecutive "active" checks
+  const pollInterval = 3000;      // Poll every 3 seconds
+
+  while (Date.now() - startTime < maxWait) {
     try {
       const response = await fetch(`${baseURL}/v1/templates/${templateID}`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${options.apiKey}`,
+          'X-API-Key': options.apiKey,
         },
       });
-      
+
       if (response.ok) {
         const data = await response.json() as any;
         const status = data.status || '';
-        
-        if (status === 'active') {
-          // Template is published and ready!
-          if (options.onLog) {
-            options.onLog({ 
-              message: `✅ Template published and active (ID: ${templateID})`,
-              timestamp: new Date().toISOString(),
-              level: 'info'
-            });
+        const isActive = data.is_active !== false; // Default to true if not specified
+
+        if (status === 'active' && isActive) {
+          consecutiveActiveCount++;
+
+          if (consecutiveActiveCount === 1) {
+            if (options.onLog) {
+              options.onLog({
+                message: '⏳ Template active, verifying stability...',
+                timestamp: new Date().toISOString(),
+                level: 'info'
+              });
+            }
           }
-          return;
-        } else if (status === 'failed') {
-          throw new Error('Template publishing failed');
-        } else if (status === 'building' || status === 'publishing') {
-          // Still processing, wait more
-          if (options.onLog) {
-            options.onLog({ 
-              message: `⏳ Template status: ${status}, waiting for active...`,
-              timestamp: new Date().toISOString(),
-              level: 'info'
-            });
+
+          // Return after 2 consecutive "active" checks
+          if (consecutiveActiveCount >= requiredConsecutive) {
+            if (options.onLog) {
+              options.onLog({
+                message: `✅ Template active and stable (ID: ${templateID})`,
+                timestamp: new Date().toISOString(),
+                level: 'info'
+              });
+            }
+            return;
+          }
+        } else {
+          // Status regressed (e.g., active → publishing)
+          if (consecutiveActiveCount > 0) {
+            if (options.onLog) {
+              options.onLog({
+                message: `⏳ Template status changed to ${status}, continuing to wait...`,
+                timestamp: new Date().toISOString(),
+                level: 'info'
+              });
+            }
+            consecutiveActiveCount = 0; // Reset counter
+          }
+
+          if (status === 'failed' || status === 'error') {
+            throw new Error(`Template activation failed with status: ${status}`);
+          }
+
+          if (status === 'building' || status === 'publishing') {
+            // Still processing, wait more
+            if (options.onLog && consecutiveActiveCount === 0) {
+              options.onLog({
+                message: `⏳ Template status: ${status}, waiting for active...`,
+                timestamp: new Date().toISOString(),
+                level: 'info'
+              });
+            }
           }
         }
       }
     } catch (error) {
       // Template might not be visible yet, continue waiting
+      if (options.onLog && error instanceof Error && error.message.includes('activation failed')) {
+        throw error; // Re-throw activation failures
+      }
     }
-    
-    // Wait 2 seconds before next check
-    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Wait 3 seconds before next check
+    await new Promise(resolve => setTimeout(resolve, pollInterval));
   }
-  
-  // Timeout - but don't fail, template might still become active later
-  if (options.onLog) {
-    options.onLog({ 
-      message: `⚠️  Template not yet active after ${maxWaitSeconds}s, but build succeeded`,
-      timestamp: new Date().toISOString(),
-      level: 'warn'
-    });
-  }
+
+  // Timeout - throw error instead of warning
+  const timeoutMinutes = Math.round(maxWait / 60000);
+  throw new Error(
+    `Template did not become stable within ${timeoutMinutes} minutes. ` +
+    `Template may still be publishing. Try creating a sandbox in a few minutes.`
+  );
 }
 
 /**

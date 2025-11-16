@@ -64,9 +64,25 @@ export enum FileEventType {
 // =============================================================================
 
 export interface HealthResponse {
-  status: string;
-  uptime_seconds: number;
-  version: string;
+  status: string;                   // Health status (e.g., 'healthy')
+  agent?: string;                   // Agent name (e.g., 'hopx-vm-agent-desktop')
+  version: string;                  // Agent version
+  uptime?: string;                  // Uptime as string (e.g., '2h34m12s')
+  uptime_seconds: number;           // [Deprecated] Use uptime instead
+  go_version?: string;              // Go version (e.g., 'go1.22.2')
+  vm_id?: string;                   // VM ID
+  features?: {                      // Available features
+    code_execution?: boolean;
+    file_operations?: boolean;
+    terminal_access?: boolean;
+    websocket_streaming?: boolean;
+    rich_output?: boolean;
+    background_jobs?: boolean;
+    ipython_kernel?: boolean;
+    system_metrics?: boolean;
+    languages?: string[];
+  };
+  active_streams?: number;          // Number of active streams
 }
 
 export interface Features {
@@ -78,10 +94,20 @@ export interface Features {
 }
 
 export interface InfoResponse {
-  version: string;
-  uptime_seconds: number;
-  features: Features;
-  endpoints: Record<string, string>;
+  vm_id?: string;                   // VM ID
+  agent?: string;                   // Agent name
+  agent_version?: string;           // Agent version
+  version: string;                  // [Deprecated] Use agent_version instead
+  os?: string;                      // Operating system
+  arch?: string;                    // Architecture (e.g., 'amd64')
+  go_version?: string;              // Go version
+  vm_ip?: string;                   // VM IP address
+  vm_port?: string;                 // VM port
+  start_time?: string;              // Start time
+  uptime?: number;                  // Uptime in seconds
+  uptime_seconds: number;           // [Deprecated] Use uptime instead
+  endpoints?: Record<string, string>; // Map of endpoint names to HTTP methods + paths
+  features?: Record<string, any>;   // Available features
 }
 
 export interface SystemMetrics {
@@ -142,6 +168,15 @@ export interface ExecuteResponse {
   stderr: string;
   exit_code: number;
   execution_time: number;
+  timestamp?: string;               // Execution timestamp
+  language?: string;                // Programming language used
+  // Rich output fields (from /execute/rich endpoint)
+  svg?: string;                     // SVG output (image/svg+xml)
+  markdown?: string;                // Markdown output (text/markdown)
+  html?: string;                    // HTML output (text/html)
+  json_output?: any;                // JSON output (application/json)
+  png?: string;                     // PNG output base64 (image/png)
+  result?: string;                  // Rich output from Jupyter (when available)
 }
 
 export interface RichOutput {
@@ -175,10 +210,16 @@ export interface AsyncExecuteResponse {
 
 export interface ProcessInfo {
   process_id: string;
+  execution_id?: string;            // Execution identifier
   name?: string;
   status: ExecutionStatus;
+  language?: string;                // Programming language
   started_at: string;
-  execution_time?: number;
+  end_time?: string;                // End time (if completed)
+  exit_code?: number;               // Exit code
+  duration?: number;                // Duration in seconds
+  pid?: number;                     // System process ID
+  execution_time?: number;          // [Deprecated] Use duration instead
 }
 
 export interface ProcessListResponse {
@@ -238,6 +279,9 @@ export interface CommandResponse {
   stderr: string;
   exit_code: number;
   execution_time: number;
+  command?: string;                 // Command that was executed
+  pid?: number;                     // Process ID
+  timestamp?: string;               // Execution timestamp
 }
 
 // =============================================================================
@@ -283,25 +327,43 @@ export interface VNCInfo {
 }
 
 export interface WindowInfo {
-  id: string;
-  title: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  focused: boolean;
+  id: string;                       // Window ID (X11 window identifier)
+  title: string;                    // Window title
+  x: number;                        // X coordinate
+  y: number;                        // Y coordinate
+  width: number;                    // Window width
+  height: number;                   // Window height
+  focused: boolean;                 // [Deprecated] Use isActive instead
+  isActive?: boolean;               // Whether this window is currently active
+  isMinimized?: boolean;            // Whether this window is minimized
+  pid?: number;                     // Process ID owning this window
 }
 
 export interface RecordingInfo {
-  recording: boolean;
-  output_file?: string;
-  duration?: number;
+  recording_id?: string;            // Unique recording identifier
+  recording: boolean;               // [Deprecated] Check status === 'recording'
+  status?: string;                  // Recording status: 'recording', 'stopped', 'failed'
+  start_time?: string;              // Recording start time
+  end_time?: string;                // Recording end time (if stopped)
+  duration?: number;                // Recording duration in seconds
+  file_path?: string;               // Path to recorded video file
+  output_file?: string;             // [Deprecated] Use file_path instead
+  file_size?: number;               // Video file size in bytes
+  format?: string;                  // Video format: 'mp4', 'webm'
 }
 
 export interface DisplayInfo {
-  width: number;
-  height: number;
-  depth: number;
+  width: number;                    // Display width in pixels
+  height: number;                   // Display height in pixels
+  depth: number;                    // Color depth (bits per pixel)
+  refresh_rate?: number;            // Refresh rate in Hz
+  displays?: Array<{                // List of available displays (multi-monitor support)
+    id?: number;
+    name?: string;
+    width?: number;
+    height?: number;
+    primary?: boolean;
+  }>;
 }
 
 export interface ScreenshotResponse {

@@ -113,9 +113,28 @@ export interface BuildOptions {
   
   /** Callback function for build log entries */
   onLog?: (log: LogEntry) => void;
-  
+
   /** Callback function for build progress updates (0-100) */
   onProgress?: (progress: number) => void;
+
+  /**
+   * Maximum time (in seconds) to wait for template activation after build completes.
+   *
+   * Template activation has multiple phases:
+   * - building → active → publishing → active (stable)
+   *
+   * The SDK waits for 2 consecutive "active" status checks to ensure stability.
+   *
+   * @default 2700 (45 minutes) or HOPX_TEMPLATE_BAKE_SECONDS env var
+   *
+   * @example
+   * await Template.build(template, {
+   *   name: 'my-template',
+   *   apiKey: '...',
+   *   templateActivationTimeout: 1800  // 30 minutes
+   * });
+   */
+  templateActivationTimeout?: number;
 }
 
 export interface BuildResult {
