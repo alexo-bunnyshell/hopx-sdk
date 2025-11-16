@@ -1,7 +1,7 @@
 {
   "name": "@hopx-ai/sdk",
-  "version": "0.3.0",
-  "description": "Official TypeScript/JavaScript SDK for HOPX.AI Sandboxes - 100% feature parity with Python SDK v0.3.0",
+  "version": "0.3.1",
+  "description": "Official TypeScript/JavaScript SDK for HOPX.AI Sandboxes",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
