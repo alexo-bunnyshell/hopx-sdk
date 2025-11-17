@@ -20,7 +20,7 @@ class AsyncSandbox:
     Example:
         >>> from hopx_ai import AsyncSandbox
         >>>
-        >>> async with AsyncSandbox.create(template="nodejs") as sandbox:
+        >>> async with AsyncSandbox.create(template="code-interpreter") as sandbox:
         ...     info = await sandbox.get_info()
         ...     print(info.public_host)
         # Automatically cleaned up!
@@ -82,7 +82,7 @@ class AsyncSandbox:
         2. Custom sandbox (specify template name + resources)
 
         Args:
-            template: Template name for custom sandbox (e.g., "code-interpreter", "nodejs")
+            template: Template name for custom sandbox (e.g., "code-interpreter", "base")
             template_id: Template ID to create from (resources auto-loaded, no vcpu/memory needed)
             region: Preferred region (optional)
             timeout_seconds: Auto-kill timeout in seconds (optional, default: no timeout)
@@ -104,7 +104,7 @@ class AsyncSandbox:
 
             >>> # Create custom sandbox
             >>> sandbox = await AsyncSandbox.create(
-            ...     template="nodejs",
+            ...     template="code-interpreter",
             ...     timeout_seconds=300
             ... )
         """
@@ -526,14 +526,6 @@ class AsyncSandbox:
             >>> # Output: https://7777-sandbox123.eu-1001.vms.hopx.dev/
         """
         return await self.get_preview_url(7777)
-
-    async def stop(self) -> None:
-        """Stop the sandbox (async)."""
-        await self._client.post(f"/v1/sandboxes/{self.sandbox_id}/stop")
-
-    async def start(self) -> None:
-        """Start a stopped sandbox (async)."""
-        await self._client.post(f"/v1/sandboxes/{self.sandbox_id}/start")
 
     async def pause(self) -> None:
         """Pause the sandbox (async)."""

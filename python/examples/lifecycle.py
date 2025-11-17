@@ -2,7 +2,7 @@
 """
 Sandbox lifecycle management example.
 
-Demonstrates: create, stop, start, pause, resume, kill
+Demonstrates: create, pause, resume, kill
 """
 
 from hopx_ai import Sandbox
@@ -25,28 +25,18 @@ print(f"   URL: {sandbox.get_info().public_host}")
 info = sandbox.get_info()
 print(f"\n2. Status: {info.status}")
 
-# 3. Stop sandbox
-print("\n3. Stopping sandbox...")
-sandbox.stop()
-print("   ✅ Stopped")
-
-# 4. Start again
-print("\n4. Starting sandbox...")
-sandbox.start()
-print("   ✅ Started")
-
-# 5. Pause sandbox
-print("\n5. Pausing sandbox...")
+# 3. Pause sandbox
+print("\n3. Pausing sandbox...")
 sandbox.pause()
 print("   ✅ Paused")
 
-# 6. Resume sandbox
-print("\n6. Resuming sandbox...")
+# 4. Resume sandbox
+print("\n4. Resuming sandbox...")
 sandbox.resume()
 print("   ✅ Resumed")
 
-# 7. Destroy sandbox
-print("\n7. Destroying sandbox...")
+# 5. Destroy sandbox
+print("\n5. Destroying sandbox...")
 sandbox.kill()
 print("   ✅ Destroyed")
 

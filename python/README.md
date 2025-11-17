@@ -40,7 +40,7 @@ from hopx_ai import Sandbox
 
 # Create sandbox
 sandbox = Sandbox.create(
-    template="python",
+    template="code-interpreter",
     api_key="your-api-key"  # or set HOPX_API_KEY env var
 )
 
@@ -67,7 +67,7 @@ The context manager handles cleanup automatically:
 ```python
 from hopx_ai import Sandbox
 
-with Sandbox.create(template="python") as sandbox:
+with Sandbox.create(template="code-interpreter") as sandbox:
     result = sandbox.run_code("print(2 + 2)")
     print(result.stdout)  # "4"
 ```
@@ -79,7 +79,7 @@ from hopx_ai import AsyncSandbox
 import asyncio
 
 async def main():
-    async with AsyncSandbox.create(template="python") as sandbox:
+    async with AsyncSandbox.create(template="code-interpreter") as sandbox:
         result = await sandbox.run_code("print('Async!')")
         print(result.stdout)
 
@@ -101,7 +101,7 @@ df = pd.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6]})
 print(df.describe())
 """
 
-sandbox = Sandbox.create(template="python")
+sandbox = Sandbox.create(template="code-interpreter")
 result = sandbox.run_code(agent_code)
 
 if result.success:
@@ -127,7 +127,7 @@ plt.title('Sine Wave')
 plt.show()
 """
 
-sandbox = Sandbox.create(template="python")
+sandbox = Sandbox.create(template="code-interpreter")
 result = sandbox.run_code(code)
 
 # Access chart data
@@ -144,7 +144,7 @@ Run commands sequentially in the same environment:
 ```python
 from hopx_ai import Sandbox
 
-sandbox = Sandbox.create(template="nodejs", timeout_seconds=600)
+sandbox = Sandbox.create(template="code-interpreter", timeout_seconds=600)
 
 # Clone and install
 sandbox.commands.run("git clone https://github.com/user/project.git /app")
@@ -170,7 +170,7 @@ sandbox.kill()
 Upload files, process data, and download results:
 
 ```python
-sandbox = Sandbox.create(template="python")
+sandbox = Sandbox.create(template="code-interpreter")
 
 # Upload data
 sandbox.files.write("/tmp/data.csv", csv_content)
@@ -257,7 +257,7 @@ processes = sandbox.list_system_processes()
 ```python
 # Set during creation (recommended)
 sandbox = Sandbox.create(
-    template="python",
+    template="code-interpreter",
     env_vars={
         "DATABASE_URL": "postgresql://...",
         "API_KEY": "key123",
@@ -374,7 +374,7 @@ Or pass directly to methods:
 
 ```python
 sandbox = Sandbox.create(
-    template="python",
+    template="code-interpreter",
     api_key="your-api-key"
 )
 ```
@@ -500,7 +500,7 @@ from hopx_ai import (
 )
 
 try:
-    sandbox = Sandbox.create(template="python")
+    sandbox = Sandbox.create(template="code-interpreter")
     result = sandbox.run_code("1/0")
 
 except AuthenticationError:

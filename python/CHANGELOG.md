@@ -5,6 +5,52 @@ All notable changes to the Hopx Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2025-11-17
+
+### Fixed
+
+**Critical: Template Building Upload Link Response**
+- Fixed `UploadLinkResponse` model missing `files_hash` field returned by API
+- API returns `files_hash` in `/v1/templates/files/upload-link` response
+- SDK model was missing this field, causing `TypeError` on template builds
+- Added `files_hash: Optional[str] = None` to `UploadLinkResponse` dataclass
+
+**Files Modified**:
+- `hopx_ai/template/types.py` - Added `files_hash` field to UploadLinkResponse (line 204)
+
+**Documentation: Incorrect Template References**
+- Fixed all examples and documentation using non-existent template names
+- Only 2 public templates exist: `code-interpreter` and `base`
+- Replaced 27 occurrences of `template="python"` and `template="nodejs"` with `code-interpreter`
+- **Impact**: All examples were failing with HTTP 500 errors, now work correctly
+
+**Examples: Resource Access Pattern**
+- Fixed incorrect resource access in example files
+- Changed `info.vcpu` to `info.resources.vcpu` (with null check)
+- Changed `info.memory_mb` to `info.resources.memory_mb` (with null check)
+- **Impact**: Quick start examples were crashing, now work correctly
+
+**Files Modified**:
+- `examples/quick_start.py` - Fixed resource access pattern
+- `examples/async_quick_start.py` - Fixed resource access pattern
+
+### Documentation
+
+**Updated Template Lists**:
+- README.md: All examples now use correct template names
+- All code snippets tested and verified working
+
+**Code Example Testing Policy**:
+- All code examples in documentation are now tested before inclusion
+- Example test app file created: `examples/app/main.py`
+- Template building example verified end-to-end
+
+### Removed
+
+**Deprecated Endpoints**:
+- Removed `stop()` and `start()` methods (endpoints no longer exist in API)
+- Use `pause()` and `resume()` for sandbox lifecycle management instead
+
 ## [0.3.0] - 2025-11-16
 
 ### Added
@@ -345,7 +391,7 @@ This release represents the complete, production-ready Hopx Python SDK with full
 from hopx_ai import Sandbox
 
 # Quick start
-sandbox = Sandbox.create(template="python")
+sandbox = Sandbox.create(template="code-interpreter")
 result = sandbox.run_code("print('Hello, Hopx!')")
 print(result.stdout)  # "Hello, Hopx!"
 sandbox.kill()

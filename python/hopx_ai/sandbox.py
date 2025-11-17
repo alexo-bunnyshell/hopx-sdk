@@ -133,7 +133,7 @@ class Sandbox:
             Commands resource instance
         
         Example:
-            >>> sandbox = Sandbox.create(template="nodejs")
+            >>> sandbox = Sandbox.create(template="code-interpreter")
             >>> result = sandbox.commands.run('npm install')
         """
         if self._commands is None:
@@ -630,7 +630,7 @@ class Sandbox:
             from .errors import HopxError
             raise HopxError(
                 f"Cannot connect to stopped sandbox {sandbox_id}. "
-                "Use sandbox.start() to start it first, or create a new sandbox."
+                "Please create a new sandbox."
             )
         
         if info.status == "paused":
@@ -923,7 +923,7 @@ class Sandbox:
             NotFoundError: Sandbox not found
 
         Example:
-            >>> sandbox = Sandbox.create(template="nodejs")
+            >>> sandbox = Sandbox.create(template="code-interpreter")
             >>> info = sandbox.get_info()
             >>> print(f"Status: {info.status}")
             >>> print(f"URL: {info.public_host}")
@@ -1586,7 +1586,7 @@ class Sandbox:
             seconds: New timeout duration in seconds from now (must be > 0)
 
         Example:
-            >>> sandbox = Sandbox.create(template="nodejs", timeout_seconds=300)
+            >>> sandbox = Sandbox.create(template="code-interpreter", timeout_seconds=300)
             >>> # Extend to 10 minutes from now
             >>> sandbox.set_timeout(600)
             >>>
@@ -1610,29 +1610,7 @@ class Sandbox:
         )
 
         logger.info(f"Timeout updated to {seconds}s")
-    
-    def stop(self) -> None:
-        """
-        Stop the sandbox.
-        
-        A stopped sandbox can be started again with start().
-        
-        Example:
-            >>> sandbox.stop()
-            >>> # ... do something else ...
-            >>> sandbox.start()
-        """
-        self._client.post(f"/v1/sandboxes/{self.sandbox_id}/stop")
-    
-    def start(self) -> None:
-        """
-        Start a stopped sandbox.
-        
-        Example:
-            >>> sandbox.start()
-        """
-        self._client.post(f"/v1/sandboxes/{self.sandbox_id}/start")
-    
+
     def pause(self) -> None:
         """
         Pause the sandbox.
@@ -1662,7 +1640,7 @@ class Sandbox:
         This action is irreversible. All data in the sandbox will be lost.
         
         Example:
-            >>> sandbox = Sandbox.create(template="nodejs")
+            >>> sandbox = Sandbox.create(template="code-interpreter")
             >>> # ... use sandbox ...
             >>> sandbox.kill()  # Clean up
         """

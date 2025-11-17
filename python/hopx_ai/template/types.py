@@ -201,6 +201,7 @@ class UploadLinkResponse:
     present: bool
     upload_url: Optional[str] = None
     expires_at: Optional[str] = None
+    files_hash: Optional[str] = None
     request_id: Optional[str] = None
 
 

@@ -15,8 +15,8 @@ Sync Example:
 
 Async Example:
     >>> from hopx_ai import AsyncSandbox
-    >>> 
-    >>> async with AsyncSandbox.create(template="nodejs") as sandbox:
+    >>>
+    >>> async with AsyncSandbox.create(template="code-interpreter") as sandbox:
     ...     info = await sandbox.get_info()
     ...     print(f"Running at: {info.public_host}")
     # Automatically killed when exiting context
@@ -68,7 +68,7 @@ from .template import (
     wait_for_command,
 )
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 __all__ = [
     "Sandbox",
     "AsyncSandbox",

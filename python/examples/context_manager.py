@@ -10,7 +10,7 @@ from hopx_ai import Sandbox
 print("🔧 Context Manager Example\n")
 
 # Sandbox will be automatically destroyed after the block
-with Sandbox.create(template="nodejs") as sandbox:
+with Sandbox.create(template="code-interpreter") as sandbox:
     info = sandbox.get_info()
     print(f"Sandbox created: {sandbox.sandbox_id}")
     print(f"Running at: {info.public_host}")

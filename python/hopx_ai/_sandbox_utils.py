@@ -24,7 +24,7 @@ def build_sandbox_create_payload(
     Removes None values to avoid sending unnecessary fields.
 
     Args:
-        template: Template name (e.g., "python", "nodejs")
+        template: Template name (e.g., "code-interpreter", "base")
         template_id: Template ID (alternative to template name)
         region: Preferred region (optional)
         timeout_seconds: Auto-kill timeout in seconds (optional)
@@ -39,7 +39,7 @@ def build_sandbox_create_payload(
 
     Example:
         >>> payload = build_sandbox_create_payload(
-        ...     template="python",
+        ...     template="code-interpreter",
         ...     template_id=None,
         ...     region="us-east-1",
         ...     timeout_seconds=600,
@@ -47,7 +47,7 @@ def build_sandbox_create_payload(
         ...     env_vars={"DEBUG": "true"}
         ... )
         >>> payload["template_name"]
-        'python'
+        'code-interpreter'
         >>> payload["timeout_seconds"]
         600
     """

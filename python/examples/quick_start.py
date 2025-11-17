@@ -21,7 +21,8 @@ print(f"✅ Created: {sandbox.sandbox_id}")
 info = sandbox.get_info()
 print(f"🌐 URL: {info.public_host}")
 print(f"📊 Status: {info.status}")
-print(f"💾 Resources: {info.vcpu} vCPU, {info.memory_mb}MB RAM")
+if info.resources:
+    print(f"💾 Resources: {info.resources.vcpu} vCPU, {info.resources.memory_mb}MB RAM")
 
 # Cleanup
 print("\nCleaning up...")

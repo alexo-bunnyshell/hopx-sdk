@@ -95,7 +95,7 @@ python3 examples/agent_commands.py
 - `async_iterator.py` - Async memory-efficient iteration
 - `debug_logging.py` - Enabling debug logging for API inspection
 - `rotate_api_keys.py` - Automatic API key rotation on rate limits
-- `lifecycle.py` - Sandbox lifecycle management (pause, resume, stop, start)
+- `lifecycle.py` - Sandbox lifecycle management (pause, resume, kill)
 
 ### Tests
 - `test_template_building.py` - Comprehensive template building test suite
