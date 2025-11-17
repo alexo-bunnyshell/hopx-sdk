@@ -1,0 +1,12 @@
+{
+  "name": "hopx-express-app",
+  "version": "1.0.0",
+  "description": "Simple Express app for Hopx template building",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

@@ -5,6 +5,37 @@ All notable changes to the Hopx Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2025-11-17
+
+### Fixed
+
+**Critical: npm_install() Method Uses Wrong Path**
+- Fixed `npm_install()` using incorrect npm path `/usr/bin/npm`
+- Official Node.js Docker images install npm at `/usr/local/bin/npm`
+- Changed both `npm install` and `npm install -g` commands to use correct path
+- **Impact**: All templates using `.npm_install()` were failing with "command not found" errors
+- **Files Modified**: `hopx_ai/template/builder.py` (lines 315, 333)
+
+### Changed
+
+**Examples: Comprehensive Testing and Quality Improvements**
+- Fixed 5 examples with outdated API usage
+- Created `ollama_template.py` - demonstrates Ollama LLM integration
+- Removed desktop automation examples (require premium template)
+- Fixed `rotate_api_keys.py` - removed undefined variable references
+- Updated all examples to use current SDK v0.3.1 API
+- Created `examples/app/requirements.txt` for template building examples
+- Created `package.json` and `src/index.js` for Node.js template example
+- All 25+ examples tested with data-driven evidence
+
+**Examples Fixed**:
+- `agent_code_execution.py` - Removed invalid callback parameters
+- `agent_v3_1_features.py` - Fixed exception handling
+- `lifecycle.py` - Fixed invalid Sandbox.create() parameters
+- `rotate_api_keys.py` - Fixed invalid parameters and undefined variables
+- `template_build.py` - Added unique names, mkdir workaround, workdir fix
+- `template_nodejs.py` - Rewrote to avoid file copy operations
+
 ## [0.3.1] - 2025-11-17
 
 ### Fixed

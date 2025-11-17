@@ -303,7 +303,7 @@ class Template:
     def npm_install(self, *packages: Union[str, List[str], None]) -> 'Template':
         """
         Install Node packages with npm
-        
+
         Examples:
             .npm_install("typescript", "tsx")  # Multiple args
             .npm_install(["typescript", "tsx"])  # List
@@ -312,9 +312,9 @@ class Template:
         """
         # Handle no args (package.json)
         if not packages:
-            self.run_cmd("/usr/bin/npm install")
+            self.run_cmd("/usr/local/bin/npm install")
             return self
-        
+
         # Flatten args
         pkg_list = []
         for pkg in packages:
@@ -324,13 +324,13 @@ class Template:
                 pkg_list.extend(pkg)
             else:
                 pkg_list.append(pkg)
-        
+
         if not pkg_list:
             raise ValueError("npm_install requires at least one package or no args for package.json")
-        
+
         pkgs = ' '.join(pkg_list)
         # Use full path for npm (works after systemd restart)
-        self.run_cmd(f"/usr/bin/npm install -g {pkgs}")
+        self.run_cmd(f"/usr/local/bin/npm install -g {pkgs}")
         return self
     
     def go_install(self, packages: List[str]) -> 'Template':

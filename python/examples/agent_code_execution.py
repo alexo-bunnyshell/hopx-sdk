@@ -119,22 +119,9 @@ result = x / y  # This will cause ZeroDivisionError
         print(f"   Exit code: {result.exit_code}")
         if result.stderr:
             print(f"   Error preview: {result.stderr[:100]}...\n")
-        
-        # Code with callbacks
-        print("8. Running code with callbacks...")
-        callback_code = """
-for i in range(5):
-    print(f"Iteration {i + 1}")
-"""
-        result = sandbox.run_code(
-            callback_code,
-            on_stdout=lambda data: print(f"   📤 {data.strip()}"),
-            on_result=lambda r: print(f"   ✅ Completed in {r.execution_time:.3f}s")
-        )
-        print()
-        
+
         # JavaScript code
-        print("9. Running JavaScript code...")
+        print("8. Running JavaScript code...")
         js_code = """
 const numbers = [1, 2, 3, 4, 5];
 const sum = numbers.reduce((a, b) => a + b, 0);
@@ -143,9 +130,9 @@ console.log(`Average: ${sum / numbers.length}`);
 """
         result = sandbox.run_code(js_code, language='javascript')
         print(f"✅ JavaScript output:\n{result.stdout}\n")
-        
+
         # Bash code
-        print("10. Running Bash script...")
+        print("9. Running Bash script...")
         bash_code = """
 echo "System Information:"
 echo "=================="
@@ -156,9 +143,9 @@ echo "Memory: $(free -h | grep Mem | awk '{print $2}')"
 """
         result = sandbox.run_code(bash_code, language='bash')
         print(f"✅ Bash output:\n{result.stdout}")
-        
+
         # Complex data analysis
-        print("11. Running data analysis with multiple plots...")
+        print("10. Running data analysis with multiple plots...")
         analysis_code = """
 import matplotlib
 matplotlib.use('Agg')

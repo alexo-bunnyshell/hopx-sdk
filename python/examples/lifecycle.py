@@ -14,12 +14,13 @@ print("🔄 Sandbox Lifecycle Demo\n")
 print("1. Creating sandbox...")
 sandbox = Sandbox.create(
     template="code-interpreter",
-    vcpu=2,
-    memory_mb=2048,
-    timeout=600  # 10 minutes
+    timeout_seconds=600  # 10 minutes auto-kill timeout
 )
 print(f"   ✅ Created: {sandbox.sandbox_id}")
-print(f"   URL: {sandbox.get_info().public_host}")
+info = sandbox.get_info()
+print(f"   URL: {info.public_host}")
+if info.resources:
+    print(f"   Resources: {info.resources.vcpu} vCPU, {info.resources.memory_mb}MB RAM")
 
 # 2. Check status
 info = sandbox.get_info()

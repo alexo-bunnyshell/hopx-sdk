@@ -7,6 +7,7 @@ Build a custom Node.js template with Express
 
 import os
 import asyncio
+import time
 from hopx_ai import Template, wait_for_port, AsyncSandbox
 from hopx_ai.template import BuildOptions
 
@@ -14,25 +15,58 @@ from hopx_ai.template import BuildOptions
 async def main():
     print("🚀 Node.js Template Example\n")
 
+    # Generate unique template name
+    template_name = f"nodejs-express-{int(time.time())}"
+    print(f"Template name: {template_name}\n")
+
+    # Build template with embedded file content
     template = (
-        Template()
-        .from_node_image("20")  # Uses ubuntu/node:20-22.04_edge (Debian-based)
-        .copy("package.json", "/app/package.json")
-        .copy("src/", "/app/src/")
+        Template(from_image="node:20-bookworm")  # Standard Node.js 20 image (Debian-based)
+        .run_cmd("mkdir -p /app/src")
         .set_workdir("/app")
-        .npm_install()
+        .run_cmd("""cat > package.json << 'EOF'
+{
+  "name": "hopx-express-app",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
+EOF""")
+        .run_cmd("""cat > src/index.js << 'EOF'
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
+const INSTANCE = process.env.INSTANCE || '1';
+
+app.get('/', (req, res) => {
+    res.json({
+        message: 'Hello from Hopx Node.js!',
+        instance: INSTANCE,
+        timestamp: new Date().toISOString()
+    });
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log('Server running on port ' + PORT);
+});
+EOF""")
+        .run_cmd("npm install")  # Use npm from PATH (works across Node images)
         .set_env("NODE_ENV", "production")
         .set_env("PORT", "3000")
         .set_start_cmd("node src/index.js", wait_for_port(3000, 60000))
     )
 
     print("Building Node.js template...")
+    print("Note: This may take 5-10 minutes...\n")
+
     result = await Template.build(
         template,
         BuildOptions(
-            name="nodejs-express-app",
+            name=template_name,
             api_key=os.environ["HOPX_API_KEY"],
-            on_log=lambda log: print(f"[{log['level']}] {log['message']}"),
+            on_log=lambda log: print(f"  [{log.get('level', 'INFO')}] {log.get('message', '')}"),
         ),
     )
 
@@ -41,9 +75,9 @@ async def main():
     # Create multiple sandbox instances
     print("\nCreating 3 sandbox instances...")
     sandboxes = await asyncio.gather(
-        AsyncSandbox.create(template="nodejs-express-app", env_vars={"INSTANCE": "1"}),
-        AsyncSandbox.create(template="nodejs-express-app", env_vars={"INSTANCE": "2"}),
-        AsyncSandbox.create(template="nodejs-express-app", env_vars={"INSTANCE": "3"}),
+        AsyncSandbox.create(template=template_name, env_vars={"INSTANCE": "1"}),
+        AsyncSandbox.create(template=template_name, env_vars={"INSTANCE": "2"}),
+        AsyncSandbox.create(template=template_name, env_vars={"INSTANCE": "3"}),
     )
 
     print("\n✅ Sandboxes created:")

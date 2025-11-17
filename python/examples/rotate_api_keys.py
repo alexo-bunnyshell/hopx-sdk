@@ -27,33 +27,32 @@ API_KEYS = {
 }
 
 
-def create_with_rotation(template="code-interpreter", vcpu=2, memory_mb=2048, tier="tier1"):
+def create_with_rotation(template="code-interpreter", tier="tier1"):
     """
     Create a sandbox, automatically rotating through API keys if limits are hit.
-    
+
+    Note: Resources (vcpu, memory, disk) come from the template.
+    To customize resources, create a custom template first.
+
     Args:
         template: Template name
-        vcpu: Number of vCPUs
-        memory_mb: Memory in MB
         tier: Which tier to use ("tier1", "tier2", or "tier3")
-    
+
     Returns:
         Sandbox instance or None if all keys exhausted
     """
     keys = API_KEYS[tier]
-    
+
     for i, api_key in enumerate(keys):
         try:
             print(f"🔄 Trying key {i+1}/{len(keys)} ({tier})...")
             sandbox = Sandbox.create(
                 template=template,
-                vcpu=vcpu,
-                memory_mb=memory_mb,
                 api_key=api_key
             )
             print(f"✅ Success! Created: {sandbox.sandbox_id}")
             return sandbox
-            
+
         except ResourceLimitExceededError:
             print(f"⚠️  Limit hit on key {i+1}, rotating to next...")
             if i == len(keys) - 1:
@@ -62,10 +61,10 @@ def create_with_rotation(template="code-interpreter", vcpu=2, memory_mb=2048, ti
                 # Try next tier
                 if tier == "tier1":
                     print("🔄 Switching to Tier 2 (100 VMs/org)...")
-                    return create_with_rotation(template, vcpu, memory_mb, "tier2")
+                    return create_with_rotation(template, "tier2")
                 elif tier == "tier2":
                     print("🔄 Switching to Tier 3 (500 VMs/org)...")
-                    return create_with_rotation(template, vcpu, memory_mb, "tier3")
+                    return create_with_rotation(template, "tier3")
                 else:
                     print("❌ ALL TIERS EXHAUSTED!")
                     return None

@@ -7,27 +7,27 @@ Demonstrates new features in Agent v3.1.0:
 - Agent metrics monitoring
 """
 
-from hopx_ai import Sandbox, FileNotFoundError
+from hopx_ai import Sandbox, FileNotFoundError, FileOperationError
 
 def main():
     print("=" * 60)
     print("Agent v3.1.0 Features Demo")
     print("=" * 60)
     print()
-    
+
     # Create sandbox
     print("Creating sandbox...")
     sandbox = Sandbox.create(template="code-interpreter")
     print(f"✅ Sandbox: {sandbox.sandbox_id}\n")
-    
+
     try:
         # Feature 1: Request ID tracking (automatic)
         print("1️⃣  Request ID Tracking")
         print("=" * 60)
         try:
             # This will fail and include request ID in error
-            sandbox.files.read('/nonexistent_file.txt')
-        except FileNotFoundError as e:
+            sandbox.files.read('/workspace/nonexistent_file.txt')
+        except (FileNotFoundError, FileOperationError) as e:
             print(f"✅ Error caught with Request ID!")
             print(f"   Message: {e.message[:50]}...")
             print(f"   Request ID: {e.request_id}")
