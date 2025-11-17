@@ -5,6 +5,44 @@ All notable changes to the Hopx JavaScript/TypeScript SDK will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2025-11-17
+
+### Fixed
+
+**Critical: Template Building Upload Link Response**
+- Fixed `UploadLinkResponse` type missing `filesHash` field returned by API
+- API returns `files_hash` in `/v1/templates/files/upload-link` response
+- SDK type was missing this field, causing potential TypeScript errors on template builds
+- Added `filesHash?: string` to `UploadLinkResponse` interface
+
+**Files Modified**:
+- `src/template/types.ts` - Added `filesHash` field to UploadLinkResponse (line 182)
+
+**Documentation: Incorrect Template References**
+- Fixed all examples and documentation using non-existent template names
+- Only 2 public templates exist: `code-interpreter` and `base`
+- Replaced occurrences of `template: 'python'` and `template: 'nodejs'` with `code-interpreter`
+- Impact: All examples were failing with HTTP 500 errors, now work correctly
+
+### Removed
+
+**Deprecated Endpoints**:
+- Removed `stop()` and `start()` methods (endpoints no longer exist in API)
+- Use `pause()` and `resume()` for sandbox lifecycle management instead
+
+**Files Modified**:
+- `src/sandbox.ts` - Removed deprecated methods and updated error messages
+
+### Documentation
+
+**Updated Template Lists**:
+- README.md: All examples now use correct template names (`code-interpreter` or `base`)
+- All code snippets tested and verified working
+
+**Code Example Testing Policy**:
+- All code examples in documentation are now tested before inclusion
+- Example app file created: `examples/app/main.js`
+
 ## [0.3.0] - 2025-11-16
 
 ### 🎉 SDK Goodies Pack

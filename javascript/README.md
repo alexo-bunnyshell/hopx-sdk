@@ -35,7 +35,7 @@ npm install @hopx-ai/sdk
 import { Sandbox } from '@hopx-ai/sdk';
 
 const sandbox = await Sandbox.create({
-  template: 'nodejs',
+  template: 'code-interpreter',
   apiKey: 'your-api-key'  // or set HOPX_API_KEY environment variable
 });
 
@@ -130,7 +130,7 @@ Set environment variables during sandbox creation or at runtime:
 ```typescript
 // Set during creation
 const sandbox = await Sandbox.create({
-  template: 'python',
+  template: 'code-interpreter',
   envVars: {
     DATABASE_URL: 'postgresql://localhost/db',
     API_KEY: 'sk-prod-xyz'
@@ -159,7 +159,7 @@ Environment variables persist across all code executions in the sandbox.
 Access services running in your sandbox via public URLs:
 
 ```typescript
-const sandbox = await Sandbox.create({ template: 'nodejs' });
+const sandbox = await Sandbox.create({ template: 'code-interpreter' });
 
 // Get URL for service on port 8080
 const appUrl = await sandbox.getPreviewUrl(8080);
@@ -173,14 +173,10 @@ This allows you to access web servers, APIs, or other services running inside th
 
 ## Templates
 
-Use pre-built templates for common languages:
+Hopx provides public templates for code execution:
 
-- `nodejs` - Node.js 20
-- `python` - Python 3.11
-- `code-interpreter` - Python with pandas, numpy, matplotlib
-- `go` - Go 1.21
-- `rust` - Rust with Cargo
-- `java` - Java 17
+- `code-interpreter` - Python with pandas, numpy, matplotlib, and data science tools
+- `base` - Minimal Ubuntu environment for custom builds
 
 Or build custom templates:
 
@@ -291,7 +287,7 @@ Handle API errors and execution failures:
 import { HopxError, AuthenticationError, CodeExecutionError } from '@hopx-ai/sdk';
 
 try {
-  const sandbox = await Sandbox.create({ template: 'python' });
+  const sandbox = await Sandbox.create({ template: 'code-interpreter' });
   const result = await sandbox.runCode('1/0');
 } catch (error) {
   if (error instanceof AuthenticationError) {
@@ -311,7 +307,7 @@ The SDK includes full TypeScript type definitions:
 ```typescript
 import { Sandbox, ExecutionResult, SandboxInfo } from '@hopx-ai/sdk';
 
-const sandbox = await Sandbox.create({ template: 'python' });
+const sandbox = await Sandbox.create({ template: 'code-interpreter' });
 const result: ExecutionResult = await sandbox.runCode("print('Hello')");
 const info: SandboxInfo = await sandbox.getInfo();
 ```
@@ -321,7 +317,7 @@ const info: SandboxInfo = await sandbox.getInfo();
 Call `kill()` to destroy the sandbox and stop billing:
 
 ```typescript
-const sandbox = await Sandbox.create({ template: 'nodejs' });
+const sandbox = await Sandbox.create({ template: 'code-interpreter' });
 
 try {
   await sandbox.runCode('console.log("Hello")');
@@ -334,7 +330,7 @@ Or set a timeout during creation:
 
 ```typescript
 const sandbox = await Sandbox.create({
-  template: 'nodejs',
+  template: 'code-interpreter',
   timeoutSeconds: 300  // Auto-kill after 5 minutes
 });
 ```

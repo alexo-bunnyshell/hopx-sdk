@@ -179,6 +179,7 @@ export interface UploadLinkResponse {
   present: boolean;
   uploadUrl?: string;
   expiresAt?: string;
+  filesHash?: string;
 }
 
 export interface BuildResponse {

@@ -300,7 +300,7 @@ async function main() {
 
     // Get specific template
     try {
-      const template = await Sandbox.getTemplate('python');
+      const template = await Sandbox.getTemplate('code-interpreter');
       recordResult('Sandbox.getTemplate()', 'PASS', `Template: ${template.displayName}`);
     } catch (error: any) {
       recordResult('Sandbox.getTemplate()', 'FAIL', undefined, error.message);

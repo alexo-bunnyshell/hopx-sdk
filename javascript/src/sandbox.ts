@@ -179,7 +179,7 @@ export class Sandbox {
     if (info.status === 'stopped') {
       throw new Error(
         `Cannot connect to stopped sandbox ${sandboxId}. ` +
-        `Use sandbox.start() to start it first, or create a new sandbox.`
+        `Please create a new sandbox.`
       );
     }
     
@@ -665,7 +665,7 @@ export class Sandbox {
    *
    * @example
    * ```typescript
-   * const sandbox = await Sandbox.create({ template: 'nodejs' });
+   * const sandbox = await Sandbox.create({ template: 'code-interpreter' });
    * const agentUrl = await sandbox.agentUrl;
    * // Returns: "https://7777-176329715051artmzu.eu-1001.vms.hopx.dev/"
    * ```
@@ -676,20 +676,6 @@ export class Sandbox {
 
   async kill(): Promise<void> {
     await this.publicClient.delete(`/v1/sandboxes/${this.sandboxId}`);
-  }
-
-  /**
-   * Start a stopped sandbox
-   */
-  async start(): Promise<void> {
-    await this.publicClient.post(`/v1/sandboxes/${this.sandboxId}/start`);
-  }
-
-  /**
-   * Stop a running sandbox
-   */
-  async stop(): Promise<void> {
-    await this.publicClient.post(`/v1/sandboxes/${this.sandboxId}/stop`);
   }
 
   /**
@@ -718,7 +704,7 @@ export class Sandbox {
    *
    * @example
    * ```typescript
-   * const sandbox = await Sandbox.create({ template: 'nodejs', timeoutSeconds: 300 });
+   * const sandbox = await Sandbox.create({ template: 'code-interpreter', timeoutSeconds: 300 });
    *
    * // Extend to 10 minutes from now
    * await sandbox.setTimeout(600);
