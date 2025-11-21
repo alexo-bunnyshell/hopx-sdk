@@ -1,0 +1,63 @@
+"""
+Integration tests for Desktop debug operations.
+
+Tests cover:
+- Getting debug logs
+- Getting debug process information
+"""
+
+import os
+import pytest
+from hopx_ai import Sandbox
+from hopx_ai.errors import DesktopNotAvailableError
+
+BASE_URL = os.getenv("HOPX_TEST_BASE_URL", "https://api-eu.hopx.dev")
+DESKTOP_TEMPLATE = os.getenv("HOPX_DESKTOP_TEMPLATE", "code-interpreter")
+
+
+@pytest.fixture
+def api_key():
+    """Get API key from environment."""
+    key = os.getenv("HOPX_API_KEY")
+    if not key:
+        pytest.skip("HOPX_API_KEY environment variable not set")
+    return key
+
+
+@pytest.fixture
+def sandbox(api_key):
+    """Create a sandbox for testing and clean up after."""
+    sandbox = Sandbox.create(
+        template=DESKTOP_TEMPLATE,
+        api_key=api_key,
+        base_url=BASE_URL,
+        timeout_seconds=600,
+    )
+    yield sandbox
+    try:
+        sandbox.kill()
+    except Exception:
+        pass
+
+
+class TestDesktopDebug:
+    """Test Desktop debug operations."""
+
+    def test_get_debug_logs(self, sandbox):
+        """Test getting debug logs."""
+        try:
+            logs = sandbox.desktop.get_debug_logs()
+            assert isinstance(logs, list)
+            # May have 0 or more log entries
+        except DesktopNotAvailableError:
+            pytest.skip("Desktop not available in this template")
+
+    def test_get_debug_processes(self, sandbox):
+        """Test getting debug process information."""
+        try:
+            processes = sandbox.desktop.get_debug_processes()
+            assert isinstance(processes, list)
+            # May have 0 or more processes
+        except DesktopNotAvailableError:
+            pytest.skip("Desktop not available in this template")
+

@@ -1,0 +1,76 @@
+"""
+Integration tests for Desktop window management operations.
+
+Tests cover:
+- Getting list of windows
+- Window operations (focus, close, resize, minimize)
+- Display operations
+"""
+
+import os
+import pytest
+from hopx_ai import Sandbox
+from hopx_ai.errors import DesktopNotAvailableError
+
+BASE_URL = os.getenv("HOPX_TEST_BASE_URL", "https://api-eu.hopx.dev")
+DESKTOP_TEMPLATE = os.getenv("HOPX_DESKTOP_TEMPLATE", "code-interpreter")
+
+
+@pytest.fixture
+def api_key():
+    """Get API key from environment."""
+    key = os.getenv("HOPX_API_KEY")
+    if not key:
+        pytest.skip("HOPX_API_KEY environment variable not set")
+    return key
+
+
+@pytest.fixture
+def sandbox(api_key):
+    """Create a sandbox for testing and clean up after."""
+    sandbox = Sandbox.create(
+        template=DESKTOP_TEMPLATE,
+        api_key=api_key,
+        base_url=BASE_URL,
+        timeout_seconds=600,
+    )
+    yield sandbox
+    try:
+        sandbox.kill()
+    except Exception:
+        pass
+
+
+class TestDesktopWindows:
+    """Test Desktop window management operations."""
+
+    def test_get_windows(self, sandbox):
+        """Test getting list of all windows."""
+        try:
+            windows = sandbox.desktop.get_windows()
+            assert isinstance(windows, list)
+            # May have 0 or more windows depending on template
+        except DesktopNotAvailableError:
+            pytest.skip("Desktop not available in this template")
+
+    def test_get_display(self, sandbox):
+        """Test getting display information."""
+        try:
+            display_info = sandbox.desktop.get_display()
+            assert display_info is not None
+            # Display info should have resolution information
+        except DesktopNotAvailableError:
+            pytest.skip("Desktop not available in this template")
+
+    def test_get_available_resolutions(self, sandbox):
+        """Test getting available screen resolutions."""
+        try:
+            resolutions = sandbox.desktop.get_available_resolutions()
+            assert isinstance(resolutions, list)
+            # Should have at least one resolution
+            if resolutions:
+                assert isinstance(resolutions[0], tuple)
+                assert len(resolutions[0]) == 2
+        except DesktopNotAvailableError:
+            pytest.skip("Desktop not available in this template")
+

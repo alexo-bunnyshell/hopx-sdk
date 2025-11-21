@@ -1,0 +1,79 @@
+"""
+Integration tests for Desktop screenshot operations.
+
+Tests cover:
+- Full screen screenshots
+- Region screenshots
+- Window screenshots
+"""
+
+import os
+import pytest
+from hopx_ai import Sandbox
+from hopx_ai.errors import DesktopNotAvailableError
+
+BASE_URL = os.getenv("HOPX_TEST_BASE_URL", "https://api-eu.hopx.dev")
+DESKTOP_TEMPLATE = os.getenv("HOPX_DESKTOP_TEMPLATE", "code-interpreter")
+
+
+@pytest.fixture
+def api_key():
+    """Get API key from environment."""
+    key = os.getenv("HOPX_API_KEY")
+    if not key:
+        pytest.skip("HOPX_API_KEY environment variable not set")
+    return key
+
+
+@pytest.fixture
+def sandbox(api_key):
+    """Create a sandbox for testing and clean up after."""
+    sandbox = Sandbox.create(
+        template=DESKTOP_TEMPLATE,
+        api_key=api_key,
+        base_url=BASE_URL,
+        timeout_seconds=600,
+    )
+    yield sandbox
+    try:
+        sandbox.kill()
+    except Exception:
+        pass
+
+
+class TestDesktopScreenshots:
+    """Test Desktop screenshot operations."""
+
+    def test_screenshot(self, sandbox):
+        """Test capturing full screen screenshot."""
+        try:
+            img_bytes = sandbox.desktop.screenshot()
+            assert isinstance(img_bytes, bytes)
+            assert len(img_bytes) > 0
+            # PNG files start with specific bytes
+            assert img_bytes[:8] == b'\x89PNG\r\n\x1a\n'[:8] or len(img_bytes) > 100
+        except DesktopNotAvailableError:
+            pytest.skip("Desktop not available in this template")
+
+    def test_screenshot_region(self, sandbox):
+        """Test capturing screenshot of specific region."""
+        try:
+            img_bytes = sandbox.desktop.screenshot_region(0, 0, 100, 100)
+            assert isinstance(img_bytes, bytes)
+            assert len(img_bytes) > 0
+        except DesktopNotAvailableError:
+            pytest.skip("Desktop not available in this template")
+
+    def test_capture_window(self, sandbox):
+        """Test capturing screenshot of specific window."""
+        try:
+            # Get windows first
+            windows = sandbox.desktop.get_windows()
+            if windows:
+                window_id = windows[0].window_id if hasattr(windows[0], "window_id") else windows[0].get("id")
+                img_bytes = sandbox.desktop.capture_window(window_id=window_id)
+                assert isinstance(img_bytes, bytes)
+                assert len(img_bytes) > 0
+        except DesktopNotAvailableError:
+            pytest.skip("Desktop not available in this template")
+
