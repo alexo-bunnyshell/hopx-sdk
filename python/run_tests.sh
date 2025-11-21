@@ -119,16 +119,23 @@ PYTEST_CMD="pytest"
 case $TEST_TYPE in
     integration)
         TEST_PATH="tests/integration"
+        RUN_E2E=false
         ;;
     e2e)
         TEST_PATH="tests/e2e"
+        RUN_E2E=false
         ;;
     all)
-        TEST_PATH="tests"
+        # When running all tests, integration tests run first, then E2E
+        TEST_PATH="tests/integration"
+        RUN_E2E=true
         ;;
     *)
         if [ -z "$TEST_PATH" ]; then
             TEST_PATH="tests"
+            RUN_E2E=false
+        else
+            RUN_E2E=false
         fi
         ;;
 esac
@@ -136,6 +143,7 @@ esac
 # Add custom test path if provided
 if [ -n "$TEST_PATH" ] && [ "$TEST_TYPE" != "all" ] && [ "$TEST_TYPE" != "integration" ] && [ "$TEST_TYPE" != "e2e" ]; then
     TEST_PATH="tests/$TEST_PATH"
+    RUN_E2E=false
 fi
 
 # Build pytest arguments
@@ -219,20 +227,127 @@ echo -e "${BLUE}Running tests...${NC}"
 echo ""
 
 START_TIME=$(date +%s)
+INTEGRATION_RESULT=0
+E2E_RESULT=0
 
-if [ "$OUTPUT_REPORT" = true ]; then
-    # Run with output capture
-    if $PYTEST_CMD "${PYTEST_ARGS[@]}" 2>&1 | tee "$REPORT_FILE"; then
-        TEST_RESULT=0
+# Run integration tests first (or specified test type)
+if [ "$TEST_TYPE" = "all" ] || [ "$TEST_TYPE" = "integration" ] || [ -z "$TEST_TYPE" ]; then
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}Running Integration Tests${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    # Build integration test args (replace last element with integration path)
+    INTEGRATION_ARGS=()
+    for i in "${!PYTEST_ARGS[@]}"; do
+        if [ $i -eq $((${#PYTEST_ARGS[@]} - 1)) ]; then
+            INTEGRATION_ARGS+=("tests/integration")
+        else
+            INTEGRATION_ARGS+=("${PYTEST_ARGS[$i]}")
+        fi
+    done
+    
+    if [ "$OUTPUT_REPORT" = true ]; then
+        INTEGRATION_REPORT="$REPORT_DIR/integration_pytest_output.txt"
+        if $PYTEST_CMD "${INTEGRATION_ARGS[@]}" 2>&1 | tee "$INTEGRATION_REPORT"; then
+            INTEGRATION_RESULT=0
+        else
+            INTEGRATION_RESULT=$?
+        fi
     else
-        TEST_RESULT=$?
+        if $PYTEST_CMD "${INTEGRATION_ARGS[@]}"; then
+            INTEGRATION_RESULT=0
+        else
+            INTEGRATION_RESULT=$?
+        fi
     fi
-else
-    # Run normally
-    if $PYTEST_CMD "${PYTEST_ARGS[@]}"; then
+    
+    echo ""
+    if [ $INTEGRATION_RESULT -eq 0 ]; then
+        echo -e "${GREEN}✓ Integration tests passed${NC}"
+    else
+        echo -e "${RED}✗ Integration tests failed${NC}"
+        if [ "$FAIL_FAST" = true ]; then
+            echo -e "${YELLOW}Stopping due to --fail-fast flag${NC}"
+            TEST_RESULT=$INTEGRATION_RESULT
+            END_TIME=$(date +%s)
+            DURATION=$((END_TIME - START_TIME))
+            # Skip to results section
+            RUN_E2E=false
+        fi
+    fi
+    echo ""
+fi
+
+# Run E2E tests after integration tests (if running all tests)
+if [ "$RUN_E2E" = true ] && [ $INTEGRATION_RESULT -eq 0 ]; then
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}Running E2E Tests${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    # Build E2E test args (replace last element with e2e path)
+    E2E_ARGS=()
+    for i in "${!PYTEST_ARGS[@]}"; do
+        if [ $i -eq $((${#PYTEST_ARGS[@]} - 1)) ]; then
+            E2E_ARGS+=("tests/e2e")
+        else
+            E2E_ARGS+=("${PYTEST_ARGS[$i]}")
+        fi
+    done
+    
+    if [ "$OUTPUT_REPORT" = true ]; then
+        E2E_REPORT="$REPORT_DIR/e2e_pytest_output.txt"
+        if $PYTEST_CMD "${E2E_ARGS[@]}" 2>&1 | tee "$E2E_REPORT"; then
+            E2E_RESULT=0
+        else
+            E2E_RESULT=$?
+        fi
+    else
+        if $PYTEST_CMD "${E2E_ARGS[@]}"; then
+            E2E_RESULT=0
+        else
+            E2E_RESULT=$?
+        fi
+    fi
+    
+    echo ""
+    if [ $E2E_RESULT -eq 0 ]; then
+        echo -e "${GREEN}✓ E2E tests passed${NC}"
+    else
+        echo -e "${RED}✗ E2E tests failed${NC}"
+    fi
+    echo ""
+elif [ "$RUN_E2E" = true ] && [ $INTEGRATION_RESULT -ne 0 ]; then
+    echo -e "${YELLOW}Skipping E2E tests due to integration test failures${NC}"
+    echo ""
+fi
+
+# Determine overall result
+if [ "$TEST_TYPE" = "all" ]; then
+    if [ $INTEGRATION_RESULT -eq 0 ] && [ $E2E_RESULT -eq 0 ]; then
         TEST_RESULT=0
     else
-        TEST_RESULT=$?
+        TEST_RESULT=1
+    fi
+elif [ "$TEST_TYPE" = "integration" ]; then
+    TEST_RESULT=$INTEGRATION_RESULT
+elif [ "$TEST_TYPE" = "e2e" ]; then
+    TEST_RESULT=$E2E_RESULT
+else
+    # For custom paths, run normally
+    if [ "$OUTPUT_REPORT" = true ]; then
+        if $PYTEST_CMD "${PYTEST_ARGS[@]}" 2>&1 | tee "$REPORT_FILE"; then
+            TEST_RESULT=0
+        else
+            TEST_RESULT=$?
+        fi
+    else
+        if $PYTEST_CMD "${PYTEST_ARGS[@]}"; then
+            TEST_RESULT=0
+        else
+            TEST_RESULT=$?
+        fi
     fi
 fi
 
@@ -243,6 +358,26 @@ echo ""
 echo -e "${BLUE}========================================${NC}"
 
 # Print results
+if [ "$TEST_TYPE" = "all" ]; then
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}Test Summary${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    if [ $INTEGRATION_RESULT -eq 0 ]; then
+        echo -e "Integration Tests: ${GREEN}✓ PASSED${NC}"
+    else
+        echo -e "Integration Tests: ${RED}✗ FAILED${NC}"
+    fi
+    if [ "$RUN_E2E" = true ]; then
+        if [ $E2E_RESULT -eq 0 ]; then
+            echo -e "E2E Tests:         ${GREEN}✓ PASSED${NC}"
+        else
+            echo -e "E2E Tests:         ${RED}✗ FAILED${NC}"
+        fi
+    fi
+    echo ""
+fi
+
 if [ $TEST_RESULT -eq 0 ]; then
     echo -e "${GREEN}✓ All tests passed!${NC}"
     echo -e "Duration: ${GREEN}${DURATION}s${NC}"
@@ -264,7 +399,16 @@ else
     
     if [ "$OUTPUT_REPORT" = true ]; then
         echo -e "Reports saved to: ${GREEN}$REPORT_DIR${NC}"
-        echo -e "Check ${YELLOW}$REPORT_FILE${NC} for details"
+        if [ "$TEST_TYPE" = "all" ]; then
+            if [ $INTEGRATION_RESULT -ne 0 ]; then
+                echo -e "Integration test report: ${YELLOW}$REPORT_DIR/integration_pytest_output.txt${NC}"
+            fi
+            if [ "$RUN_E2E" = true ] && [ $E2E_RESULT -ne 0 ]; then
+                echo -e "E2E test report: ${YELLOW}$REPORT_DIR/e2e_pytest_output.txt${NC}"
+            fi
+        else
+            echo -e "Check ${YELLOW}$REPORT_FILE${NC} for details"
+        fi
     fi
 fi
 
