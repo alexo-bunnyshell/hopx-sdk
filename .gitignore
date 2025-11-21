@@ -49,16 +49,17 @@ CLAUDE.md
 
 # avoid accidental garbage collection
 !README.md
-*.md
 test*.py
 check*.py
 *.txt
 
 # exclude important documentation files (must come AFTER *.md)
+!**/*/README.md
 !python/tests/README.md
 !python/tests/INTENTIONALLY_UNTESTED.md
 !python/tests/COVERAGE_REPORT.md
 !.github/workflows/README.md
+
 
 # avoid files for local use
 local/

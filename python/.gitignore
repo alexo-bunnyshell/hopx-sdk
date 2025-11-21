@@ -53,7 +53,7 @@ CLAUDE.md
 
 # avoid accidental garbage collection
 !README.md
-*.md
+!**/README.md
 
 # exclude important test documentation files (must come AFTER *.md)
 !tests/README.md
