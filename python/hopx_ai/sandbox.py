@@ -364,13 +364,18 @@ class Sandbox:
             
             info = self.get_info()
             agent_url = info.public_host.rstrip('/')
-            self._ws_client = WebSocketClient(agent_url)
+            token = self.get_token()
+            self._ws_client = WebSocketClient(agent_url, token)
             logger.debug(f"WebSocket client initialized: {agent_url}")
     
     def refresh_token(self) -> None:
         """
         Refresh JWT token for agent authentication.
         Called automatically when token is about to expire (<1 hour left).
+
+        Note: Avoid calling this method while WebSocket connections are being established
+        to prevent race conditions where a connection uses an old token. The SDK handles
+        token refresh automatically before it expires.
         """
         response = self._client.post(f"/v1/sandboxes/{self.sandbox_id}/token/refresh")
 
@@ -380,6 +385,8 @@ class Sandbox:
         # Update agent client's JWT token if already initialized
         if self._agent_client is not None and "auth_token" in response:
             self._agent_client.update_jwt_token(response["auth_token"])
+        if self._ws_client is not None and "auth_token" in response:
+            self._ws_client.update_jwt_token(response["auth_token"])
     
     def _ensure_valid_token(self) -> None:
         """
