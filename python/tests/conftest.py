@@ -7,11 +7,26 @@ integration and E2E tests.
 
 import os
 import pytest
+import time
 from hopx_ai import Sandbox
 
 # Test configuration
 BASE_URL = os.getenv("HOPX_TEST_BASE_URL", "https://api-eu.hopx.dev")
 TEST_TEMPLATE = os.getenv("HOPX_TEST_TEMPLATE", "code-interpreter")
+
+# Import debug utilities if available
+try:
+    from tests.integration.debug_utils import (
+        timed_operation,
+        ProgressIndicator,
+        log_test_start,
+        log_test_complete,
+        DEBUG_ENABLED,
+    )
+    DEBUG_AVAILABLE = True
+except ImportError:
+    DEBUG_AVAILABLE = False
+    DEBUG_ENABLED = False
 
 
 @pytest.fixture(scope="session")
@@ -60,6 +75,37 @@ def sandbox_factory(api_key, test_base_url, test_template):
     return _create_sandbox
 
 
+@pytest.fixture(autouse=True)
+def test_timer(request):
+    """
+    Automatic fixture that times each test and logs debug information.
+    
+    This fixture runs automatically for every test and provides timing
+    information when HOPX_TEST_DEBUG environment variable is set.
+    """
+    if not DEBUG_AVAILABLE:
+        yield
+        return
+    
+    test_name = f"{request.node.parent.name}::{request.node.name}"
+    start_time = time.time()
+    
+    log_test_start(test_name)
+    
+    yield
+    
+    duration = time.time() - start_time
+    log_test_complete(test_name, duration)
+    
+    # Warn if test takes longer than 2 minutes
+    if duration > 120:
+        import logging
+        logger = logging.getLogger("hopx.test.debug")
+        logger.warning(
+            f"⚠️  Test {test_name} took {duration:.2f}s (>2 minutes)"
+        )
+
+
 def pytest_configure(config):
     """Configure pytest with custom markers."""
     config.addinivalue_line(
@@ -71,4 +117,10 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "slow: marks tests as slow running"
     )
+    
+    # Enable verbose output if debug mode is enabled
+    if DEBUG_AVAILABLE and DEBUG_ENABLED:
+        # Set pytest to show more verbose output
+        if hasattr(config.option, 'verbose'):
+            config.option.verbose = max(config.option.verbose or 0, 1)
 

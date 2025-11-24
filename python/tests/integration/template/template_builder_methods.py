@@ -1,9 +1,24 @@
 """
 Integration tests for Template builder methods.
 
+This module contains integration tests for the Template builder pattern methods.
+These tests validate that the fluent builder API correctly constructs template
+configurations and that getter methods return expected values.
+
 Tests cover:
-- Template builder methods (from_node_image, git_clone, etc.)
-- Template getter methods
+- Template builder methods (from_node_image, from_python_image, from_ubuntu_image, etc.)
+- Template getter methods (get_from_image, get_steps, get_start_cmd, get_ready_check)
+- Template builder method chaining
+- Template configuration methods (set_env, set_envs, set_workdir, set_start_cmd)
+- Special builder methods (git_clone, apt_install, skip_cache)
+
+All tests use the real API endpoint (non-production) and require HOPX_API_KEY
+environment variable to be set. Tests that create templates will clean up
+after themselves by deleting the created templates.
+
+Test Environment:
+    - Base URL: Set via HOPX_TEST_BASE_URL env var (default: https://api-eu.hopx.dev)
+    - Authentication: HOPX_API_KEY environment variable must be set
 """
 
 import os
@@ -12,12 +27,33 @@ import time
 from hopx_ai import Template, AsyncSandbox
 from hopx_ai.template import BuildOptions
 
+# Import debugging utilities
+try:
+    from tests.integration.debug_utils import timed_operation, ProgressIndicator
+    DEBUG_AVAILABLE = True
+except ImportError:
+    DEBUG_AVAILABLE = False
+    # Fallback if debug_utils not available
+    from contextlib import nullcontext as timed_operation
+    ProgressIndicator = None
+
 BASE_URL = os.getenv("HOPX_TEST_BASE_URL", "https://api-eu.hopx.dev")
 
 
 @pytest.fixture
 def api_key():
-    """Get API key from environment."""
+    """
+    Pytest fixture providing API key for authentication.
+    
+    Retrieves the HOPX_API_KEY from environment variables. If not set,
+    the test will be skipped.
+    
+    Returns:
+        str: The API key for authenticating with the HOPX API
+        
+    Raises:
+        pytest.skip: If HOPX_API_KEY is not set in environment
+    """
     key = os.getenv("HOPX_API_KEY")
     if not key:
         pytest.skip("HOPX_API_KEY environment variable not set")
@@ -26,22 +62,66 @@ def api_key():
 
 @pytest.fixture
 def template_name():
-    """Generate unique template name for testing."""
+    """
+    Pytest fixture generating unique template names for testing.
+    
+    Creates a unique template name by appending a timestamp to a base prefix.
+    This ensures that each test run uses a unique template name, preventing
+    conflicts when running tests in parallel or repeatedly.
+    
+    Returns:
+        str: A unique template name in the format "test-builder-{timestamp}"
+    """
     return f"test-builder-{int(time.time())}"
 
 
 class TestTemplateBuilderMethods:
-    """Test Template builder methods."""
+    """
+    Test suite for Template builder methods.
+    
+    This class contains tests that validate the fluent builder API for creating
+    templates. Tests verify that builder methods correctly configure template
+    objects and that getter methods return the expected values.
+    
+    The tests cover:
+    - Base image selection methods
+    - Step configuration methods
+    - Environment variable configuration
+    - Working directory and start command configuration
+    - Special operations like git clone and apt install
+    - Cache control methods
+    """
 
     def test_from_node_image(self):
-        """Test creating template from Node.js base image."""
+        """
+        Test creating a template from a Node.js base image.
+        
+        Validates that the from_node_image() builder method correctly sets
+        the base image for the template. Verifies that the getter method
+        returns a non-None value containing the expected image identifier.
+        
+        This is a unit-style test that doesn't require API calls, only
+        validating the builder pattern configuration.
+        """
         template = Template().from_node_image("20")
         
         assert template.get_from_image() is not None
         assert "node" in template.get_from_image().lower() or "20" in template.get_from_image()
 
     def test_template_getter_methods(self):
-        """Test template getter methods."""
+        """
+        Test template getter methods return correct values.
+        
+        Creates a template with multiple configuration steps and verifies
+        that all getter methods return the expected values:
+        - get_from_image() returns the base image
+        - get_steps() returns a list of build steps
+        - get_start_cmd() returns the configured start command
+        - get_ready_check() returns None when no ready check is set
+        
+        This test validates that the builder pattern correctly stores
+        configuration and that getters provide access to it.
+        """
         template = (
             Template()
             .from_python_image("3.11")
@@ -66,7 +146,20 @@ class TestTemplateBuilderMethods:
         assert ready_check is None  # No ready check set
 
     def test_template_builder_chaining(self):
-        """Test template builder method chaining."""
+        """
+        Test template builder method chaining works correctly.
+        
+        Validates that multiple builder methods can be chained together
+        in a fluent API pattern. Tests various builder methods including:
+        - Base image selection (from_ubuntu_image)
+        - Package installation (apt_install)
+        - Command execution (run_cmd)
+        - Working directory configuration (set_workdir)
+        - Environment variable configuration (set_env, set_envs)
+        
+        Verifies that all steps are correctly added to the template's
+        step list when chained together.
+        """
         template = (
             Template()
             .from_ubuntu_image("22.04")
@@ -83,7 +176,25 @@ class TestTemplateBuilderMethods:
 
     @pytest.mark.asyncio
     async def test_template_with_git_clone(self, api_key, template_name):
-        """Test template with git clone."""
+        """
+        Test creating a template that includes a git clone operation.
+        
+        This integration test validates that the git_clone() builder method
+        correctly configures a template to clone a git repository during
+        the build process. The test:
+        1. Creates a template with git clone step
+        2. Builds the template using the real API
+        3. Verifies the template was created successfully
+        4. Cleans up by deleting the template
+        
+        Uses a public repository (python/cpython) for testing. The template
+        installs git, clones the repository, and lists the cloned directory
+        to verify the operation.
+        
+        Args:
+            api_key: Pytest fixture providing API authentication key
+            template_name: Pytest fixture providing unique template name
+        """
         # Use a small public repo for testing
         template = (
             Template()
@@ -93,17 +204,19 @@ class TestTemplateBuilderMethods:
             .run_cmd("ls /tmp/cpython")
         )
 
-        result = await Template.build(
-            template,
-            BuildOptions(
-                name=template_name,
-                api_key=api_key,
-                base_url=BASE_URL,
-                cpu=1,
-                memory=1024,
-                disk_gb=5,
-            ),
-        )
+        # Build the template (this can take 1+ minutes)
+        with timed_operation("Template.build", warn_threshold=60.0, template_name=template_name):
+            result = await Template.build(
+                template,
+                BuildOptions(
+                    name=template_name,
+                    api_key=api_key,
+                    base_url=BASE_URL,
+                    cpu=1,
+                    memory=1024,
+                    disk_gb=5,
+                ),
+            )
 
         assert result.template_id is not None
 
@@ -118,7 +231,17 @@ class TestTemplateBuilderMethods:
             pass
 
     def test_template_skip_cache(self):
-        """Test template skip_cache method."""
+        """
+        Test template skip_cache method configuration.
+        
+        Validates that the skip_cache() builder method correctly marks
+        build steps to skip caching. This is useful for steps that should
+        always run fresh, such as steps that depend on external resources
+        or have non-deterministic outputs.
+        
+        Verifies that the last step in the template has the skip_cache
+        flag set when skip_cache() is called.
+        """
         template = (
             Template()
             .from_python_image("3.11")

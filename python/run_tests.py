@@ -126,7 +126,8 @@ class TestRunner:
 
     def __init__(self, args):
         self.args = args
-        self.project_root = Path(__file__).parent
+        # Get project root (one level up from python/)
+        self.project_root = Path(__file__).parent.parent
         self.reports_dir = self.project_root / "local" / "reports"
         self.reports_dir.mkdir(parents=True, exist_ok=True)
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -171,13 +172,13 @@ class TestRunner:
         else:
             cmd.append("-q")
 
-        # Add JUnit XML report
+        # Add JUnit XML report (use absolute path for pytest, but store in project root)
         junit_xml = self.reports_dir / f"junit_{self.timestamp}.xml"
-        cmd.extend(["--junitxml", str(junit_xml)])
+        cmd.extend(["--junitxml", str(junit_xml.absolute())])
 
-        # Add HTML report (required dependency)
+        # Add HTML report (required dependency) - use absolute path
         html_report = self.reports_dir / f"report_{self.timestamp}.html"
-        cmd.extend(["--html", str(html_report), "--self-contained-html"])
+        cmd.extend(["--html", str(html_report.absolute()), "--self-contained-html"])
 
         # Add coverage if requested (required dependency when --coverage is used)
         if self.args.coverage:
@@ -206,10 +207,11 @@ class TestRunner:
         print(f"Running tests: {' '.join(cmd)}")
         print(f"{'='*80}\n")
 
-        # Run pytest
-        result = subprocess.run(cmd, cwd=self.project_root)
+        # Run pytest (from python directory, but reports go to project root)
+        python_dir = self.project_root / "python"
+        result = subprocess.run(cmd, cwd=python_dir)
 
-        # Generate summary report
+        # Generate summary report (use relative paths for display)
         self.generate_summary_report(junit_xml, html_report if 'html_report' in locals() else None)
 
         return result.returncode
@@ -221,11 +223,11 @@ class TestRunner:
             "start_time": datetime.fromtimestamp(self.start_time).isoformat(),
             "end_time": datetime.now().isoformat(),
             "duration_seconds": round(time.time() - self.start_time, 2),
-            "junit_xml": str(junit_xml.relative_to(self.project_root)),
+            "junit_xml": f"local/reports/{junit_xml.name}",
         }
 
         if html_report:
-            summary["html_report"] = str(html_report.relative_to(self.project_root))
+            summary["html_report"] = f"local/reports/{html_report.name}"
 
         # Parse JUnit XML if it exists
         if junit_xml.exists():
@@ -283,12 +285,12 @@ class TestRunner:
             except Exception as e:
                 summary["parse_error"] = str(e)
 
-        # Write JSON summary
+        # Write JSON summary (relative to project root for display)
         summary_json = self.reports_dir / f"summary_{self.timestamp}.json"
         with open(summary_json, "w") as f:
             json.dump(summary, f, indent=2)
 
-        # Write Markdown summary
+        # Write Markdown summary (relative to project root for display)
         summary_md = self.reports_dir / f"summary_{self.timestamp}.md"
         with open(summary_md, "w") as f:
             f.write(f"# Test Execution Summary\n\n")
@@ -334,7 +336,7 @@ class TestRunner:
             print(f"Errors: {stats['errors']}")
             print(f"Skipped: {stats['skipped']}")
             print(f"Success Rate: {stats['success_rate']}%")
-        print(f"\nReports generated in: {self.reports_dir.relative_to(self.project_root)}")
+        print(f"\nReports generated in: local/reports")
         print(f"- JUnit XML: {junit_xml.name}")
         if html_report:
             print(f"- HTML Report: {html_report.name}")
