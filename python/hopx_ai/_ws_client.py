@@ -8,11 +8,14 @@ from urllib.parse import urlparse
 
 try:
     import websockets
-    from websockets.client import WebSocketClientProtocol
+    from websockets.asyncio.client import connect, ClientConnection
     WEBSOCKETS_AVAILABLE = True
+    # Use new asyncio API type (websockets 11.0+)
+    WebSocketClientProtocol = ClientConnection
 except ImportError:
     WEBSOCKETS_AVAILABLE = False
     WebSocketClientProtocol = Any  # type: ignore
+    connect = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +28,11 @@ class WebSocketClient:
     message protocol, and async iteration.
     """
     
-    def __init__(self, agent_url: str):
+    def __init__(
+        self,
+        agent_url: str,
+        jwt_token: Optional[str] = None,
+    ):
         """
         Initialize WebSocket client.
         
@@ -39,12 +46,20 @@ class WebSocketClient:
             )
         
         self.agent_url = agent_url.rstrip('/')
+        self._jwt_token = jwt_token
         # Convert https:// to wss:// for WebSocket
         parsed = urlparse(self.agent_url)
         ws_scheme = 'wss' if parsed.scheme == 'https' else 'ws'
         self.ws_base_url = f"{ws_scheme}://{parsed.netloc}"
         
         logger.debug(f"WebSocket client initialized: {self.ws_base_url}")
+
+    def update_jwt_token(self, token: str) -> None:
+        """
+        Update JWT token for agent authentication.
+        Used internally when token is refreshed.
+        """
+        self._jwt_token = token
     
     async def connect(
         self,
@@ -64,19 +79,27 @@ class WebSocketClient:
         """
         url = f"{self.ws_base_url}{endpoint}"
         logger.debug(f"Connecting to WebSocket: {url}")
+        additional_headers = None
+        if self._jwt_token:
+            additional_headers = {"Authorization": f"Bearer {self._jwt_token}"}
         
         try:
             ws = await asyncio.wait_for(
-                websockets.connect(url),
+                connect(
+                    url,
+                    additional_headers=additional_headers,
+                ),
                 timeout=timeout
             )
             logger.debug(f"WebSocket connected: {endpoint}")
             return ws
-        except asyncio.TimeoutError:
-            raise TimeoutError(f"WebSocket connection timeout: {endpoint}")
+        except asyncio.TimeoutError as e:
+            from .errors import TimeoutError as HopxTimeoutError
+            raise HopxTimeoutError(f"WebSocket connection timeout: {endpoint}") from e
         except Exception as e:
+            from .errors import AgentError
             logger.error(f"WebSocket connection failed: {e}")
-            raise
+            raise AgentError(f"WebSocket connection failed: {e}") from e
     
     async def send_message(
         self,
