@@ -19,10 +19,11 @@ export class Commands {
   async run(command: string, options?: CommandOptions): Promise<CommandResponse> {
     // ✅ CRITICAL: Wrap ALL commands (sync + background) in bash for shell features
     // This matches Python SDK behavior exactly
+    // Default timeouts: sync 30s, background 120s
     const payload: any = {
       command: 'bash',
       args: ['-c', command],
-      timeout: options?.timeout || (options?.background ? 60 : 30),
+      timeout: options?.timeout || (options?.background ? 120 : 30),
       workdir: options?.workingDir || '/workspace',
     };
 
@@ -45,10 +46,11 @@ export class Commands {
    */
   async runBackground(command: string, options?: Omit<CommandOptions, 'background'>): Promise<{ process_id: string }> {
     // ✅ CRITICAL: Wrap command in bash for shell features
+    // Default timeout: 120s (suitable for package installs and builds)
     const payload: any = {
       command: 'bash',
       args: ['-c', command],
-      timeout: options?.timeout || 60,
+      timeout: options?.timeout || 120,
       workdir: options?.workingDir || '/workspace',
     };
 

@@ -13,6 +13,8 @@ import {
   FileNotFoundError,
   FileOperationError,
   DesktopNotAvailableError,
+  SandboxExpiredError,
+  TokenExpiredError,
   ErrorCode,
 } from './errors.js';
 
@@ -169,7 +171,26 @@ export class HTTPClient {
     const errorCode = data?.code as ErrorCode | undefined;
     const message = String(data?.message || data?.error?.message || error.message || 'Unknown error');
 
-    // Authentication errors
+    // Sandbox expiry detection (410 Gone or specific error codes)
+    if (
+      errorCode === ErrorCode.SANDBOX_EXPIRED ||
+      status === 410 ||
+      (status === 404 && message.toLowerCase().includes('sandbox') && message.toLowerCase().includes('not found'))
+    ) {
+      throw new SandboxExpiredError(message, {
+        sandboxId: data?.sandbox_id,
+        createdAt: data?.created_at,
+        expiresAt: data?.expires_at,
+        status: data?.status,
+      }, requestId);
+    }
+
+    // Token expiry detection
+    if (status === 401 && (errorCode === ErrorCode.TOKEN_EXPIRED || message.toLowerCase().includes('token expired'))) {
+      throw new TokenExpiredError(message, requestId);
+    }
+
+    // Authentication errors (general)
     if (status === 401) {
       throw new AuthenticationError(message, requestId);
     }

@@ -5,6 +5,44 @@ All notable changes to the Hopx JavaScript/TypeScript SDK will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2025-11-25
+
+### Added
+
+**Sandbox Expiry Management**
+- `getTimeToExpiry()` - Get seconds remaining until sandbox expires
+- `isExpiringSoon(threshold?)` - Check if sandbox expires within threshold (default: 5 minutes)
+- `getExpiryInfo()` - Get comprehensive expiry information including `expiresAt`, `timeToExpiry`, `isExpired`, `isExpiringSoon`
+- `startExpiryMonitor(callback, threshold?, interval?)` - Proactive monitoring with callback when sandbox is about to expire
+- `stopExpiryMonitor()` - Stop expiry monitoring
+- `onExpiringSoon` callback option in `Sandbox.create()` - Auto-start monitoring when sandbox is created
+
+**Health Check Methods**
+- `isHealthy()` - Check if sandbox is ready for execution (returns boolean)
+- `ensureHealthy()` - Verify sandbox is healthy, throws `SandboxExpiredError` if expired or `HopxError` if not running
+- `preflight` option for `runCode()` - Run health check before code execution
+
+**Structured Error Types**
+- `SandboxExpiredError` - Thrown when sandbox has expired, includes metadata (sandboxId, createdAt, expiresAt, status)
+- `TokenExpiredError` - Thrown when JWT token has expired
+- `ErrorCode` enum exported for programmatic error handling
+- `SandboxErrorMetadata` type exported for error metadata access
+
+**TypeScript Types**
+- `ExpiryInfo` interface for expiry information
+- `SandboxErrorMetadata` interface for error metadata
+
+### Changed
+
+**Default Timeouts Increased**
+- `runCode()` timeout increased from 60s to 120s
+- Background commands timeout increased from 60s to 120s
+- Sync commands remain at 30s (suitable for quick operations)
+
+**Impact**: Long-running operations like package installations (`npm install`, `pip install`) are less likely to timeout with default settings.
+
+---
+
 ## [0.3.3] - 2025-11-20
 
 ### Fixed

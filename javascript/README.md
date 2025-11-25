@@ -123,6 +123,26 @@ await sandbox.commands.run('sleep 10 && echo done', {
 
 Commands run in bash, allowing you to use shell features.
 
+## Timeout Configuration
+
+Default timeouts:
+- Sync commands: 30 seconds
+- Background commands: 120 seconds
+- Code execution (`runCode`): 120 seconds
+
+Set custom timeouts for long-running operations:
+
+```typescript
+// Package installation (5 minutes)
+await sandbox.commands.run('npm install', { timeout: 300 });
+
+// Large build (10 minutes)
+await sandbox.runCode(buildScript, { timeout: 600 });
+
+// Quick check (10 seconds)
+await sandbox.commands.run('ls', { timeout: 10 });
+```
+
 ## Environment Variables
 
 Set environment variables during sandbox creation or at runtime:
@@ -284,20 +304,94 @@ The SDK captures matplotlib/seaborn charts, HTML tables, and JSON output.
 Handle API errors and execution failures:
 
 ```typescript
-import { HopxError, AuthenticationError, CodeExecutionError } from '@hopx-ai/sdk';
+import {
+  HopxError,
+  AuthenticationError,
+  CodeExecutionError,
+  SandboxExpiredError,
+  TokenExpiredError
+} from '@hopx-ai/sdk';
 
 try {
   const sandbox = await Sandbox.create({ template: 'code-interpreter' });
   const result = await sandbox.runCode('1/0');
 } catch (error) {
-  if (error instanceof AuthenticationError) {
+  if (error instanceof SandboxExpiredError) {
+    console.error(`Sandbox expired: ${error.sandboxId}`);
+    console.error(`Created: ${error.createdAt}, Expired: ${error.expiresAt}`);
+  } else if (error instanceof TokenExpiredError) {
+    console.error('JWT token expired, refresh required');
+  } else if (error instanceof AuthenticationError) {
     console.error('Invalid API key');
   } else if (error instanceof CodeExecutionError) {
     console.error(`Execution failed: ${error.message}`);
   } else if (error instanceof HopxError) {
-    console.error(`API error: ${error.message}`);
+    console.error(`API error: ${error.message}, code: ${error.code}`);
   }
 }
+```
+
+All errors include `requestId` for debugging and `code` for programmatic handling.
+
+## Health Checks
+
+Verify sandbox readiness before execution:
+
+```typescript
+// Simple check
+const healthy = await sandbox.isHealthy();
+if (!healthy) {
+  console.error('Sandbox not ready');
+}
+
+// Preflight check before code execution
+const result = await sandbox.runCode(longScript, {
+  preflight: true,  // Throws if sandbox unhealthy or expired
+  timeout: 300
+});
+
+// Detailed health verification (throws on failure)
+await sandbox.ensureHealthy();
+```
+
+## Expiry Management
+
+Monitor sandbox expiration to avoid unexpected failures:
+
+```typescript
+// Get time remaining
+const seconds = await sandbox.getTimeToExpiry();
+console.log(`${seconds} seconds until expiry`);
+
+// Check if expiring soon (default: < 5 minutes)
+const expiringSoon = await sandbox.isExpiringSoon();
+const expiringIn10Min = await sandbox.isExpiringSoon(600);
+
+// Get comprehensive expiry info
+const info = await sandbox.getExpiryInfo();
+console.log(`Expires: ${info.expiresAt}`);
+console.log(`Time left: ${info.timeToExpiry}s`);
+console.log(`Is expired: ${info.isExpired}`);
+
+// Auto-monitor with callback
+const sandbox = await Sandbox.create({
+  template: 'code-interpreter',
+  timeoutSeconds: 600,
+  onExpiringSoon: (info) => {
+    console.warn(`Sandbox expires in ${info.timeToExpiry}s!`);
+  },
+  expiryWarningThreshold: 120  // Warn 2 minutes before expiry
+});
+
+// Manual monitoring
+sandbox.startExpiryMonitor(
+  (info) => console.warn('Expiring soon!'),
+  300,  // threshold: 5 minutes
+  30    // check every 30 seconds
+);
+
+// Stop monitoring
+sandbox.stopExpiryMonitor();
 ```
 
 ## TypeScript Support
@@ -305,11 +399,19 @@ try {
 The SDK includes full TypeScript type definitions:
 
 ```typescript
-import { Sandbox, ExecutionResult, SandboxInfo } from '@hopx-ai/sdk';
+import {
+  Sandbox,
+  ExecutionResult,
+  SandboxInfo,
+  ExpiryInfo,
+  ErrorCode,
+  SandboxErrorMetadata
+} from '@hopx-ai/sdk';
 
 const sandbox = await Sandbox.create({ template: 'code-interpreter' });
 const result: ExecutionResult = await sandbox.runCode("print('Hello')");
 const info: SandboxInfo = await sandbox.getInfo();
+const expiry: ExpiryInfo = await sandbox.getExpiryInfo();
 ```
 
 ## Cleanup

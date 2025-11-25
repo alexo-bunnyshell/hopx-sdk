@@ -5,6 +5,110 @@ All notable changes to the Hopx Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2025-11-25
+
+### Added
+
+**Sandbox Expiry Management**
+
+Added methods to monitor and manage sandbox expiry, enabling proactive timeout handling:
+
+- **`sandbox.get_time_to_expiry() -> Optional[int]`**: Returns seconds until sandbox expires, or `None` if no timeout is configured. Negative values indicate the sandbox has already expired.
+
+- **`sandbox.is_expiring_soon(threshold_seconds=300) -> bool`**: Check if sandbox expires within the threshold (default: 5 minutes). Returns `False` if no timeout is configured.
+
+- **`sandbox.get_expiry_info() -> ExpiryInfo`**: Returns comprehensive expiry information including `expires_at`, `time_to_expiry`, `is_expired`, `is_expiring_soon`, and `has_timeout`.
+
+- **`ExpiryInfo` model**: New dataclass for structured expiry information.
+
+**Example**:
+```python
+from hopx_ai import Sandbox
+
+sandbox = Sandbox.create(template="code-interpreter", timeout_seconds=600)
+
+# Check time remaining
+ttl = sandbox.get_time_to_expiry()
+print(f"Expires in {ttl} seconds")
+
+# Check if expiring soon
+if sandbox.is_expiring_soon():
+    sandbox.set_timeout(600)  # Extend by 10 minutes
+
+# Get comprehensive info
+expiry = sandbox.get_expiry_info()
+print(f"Has timeout: {expiry.has_timeout}")
+print(f"Time to expiry: {expiry.time_to_expiry}s")
+print(f"Expiring soon: {expiry.is_expiring_soon}")
+```
+
+**Health Check Methods**
+
+Added methods to verify sandbox readiness before executing code:
+
+- **`sandbox.is_healthy() -> bool`**: Check if sandbox is ready for execution. Returns `True` if healthy, `False` otherwise.
+
+- **`sandbox.ensure_healthy() -> None`**: Verify sandbox is healthy. Raises `SandboxExpiredError` if expired, or `HopxError` if unhealthy.
+
+- **`preflight` parameter in `run_code()`**: Run health check before code execution.
+
+**Example**:
+```python
+# Check health before execution
+if sandbox.is_healthy():
+    result = sandbox.run_code("print('Hello')")
+
+# Raise error if unhealthy
+try:
+    sandbox.ensure_healthy()
+    result = sandbox.run_code("print('Hello')")
+except SandboxExpiredError:
+    print("Sandbox expired, create a new one")
+
+# Use preflight option
+result = sandbox.run_code("print('Hello')", preflight=True)
+```
+
+**New Error Types**
+
+Added structured error types for sandbox lifecycle management:
+
+- **`SandboxExpiredError`**: Raised when sandbox has expired. Includes `metadata` with `sandbox_id`, `created_at`, `expires_at`, and `status`.
+
+- **`TokenExpiredError`**: Raised when JWT token has expired.
+
+- **`SandboxErrorMetadata`**: Dataclass with sandbox state when an error occurs.
+
+**Example**:
+```python
+from hopx_ai import Sandbox, SandboxExpiredError
+
+try:
+    sandbox.ensure_healthy()
+    result = sandbox.run_code("print('Hello')")
+except SandboxExpiredError as e:
+    print(f"Sandbox {e.sandbox_id} expired at {e.expires_at}")
+```
+
+### Changed
+
+**Default Timeouts Increased**
+
+Increased default timeouts to better handle longer-running operations:
+
+- `run_code()`: 60s → 120s
+- `commands.run()`: 30s → 120s
+- `commands.run(background=True)`: 30s → 120s
+
+**Files Modified**:
+- `hopx_ai/sandbox.py` - Added expiry/health methods, updated run_code timeout
+- `hopx_ai/async_sandbox.py` - Added async versions of all new methods
+- `hopx_ai/commands.py` - Updated default timeouts
+- `hopx_ai/_async_commands.py` - Updated default timeouts
+- `hopx_ai/errors.py` - Added SandboxExpiredError, TokenExpiredError, SandboxErrorMetadata
+- `hopx_ai/models.py` - Added ExpiryInfo dataclass
+- `hopx_ai/__init__.py` - Exported new types
+
 ## [0.3.3] - 2025-11-20
 
 ### Fixed

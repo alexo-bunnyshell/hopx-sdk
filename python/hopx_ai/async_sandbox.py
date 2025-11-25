@@ -3,12 +3,13 @@
 from typing import Optional, List, AsyncIterator, Dict, Any
 from datetime import datetime, timedelta
 
-from .models import SandboxInfo, Template
+from .models import SandboxInfo, Template, ExpiryInfo
 from ._async_client import AsyncHTTPClient
 from ._utils import remove_none_values
 from ._token_cache import TokenData, _token_cache, store_token_from_response, get_cached_token
 from ._parsers import _parse_sandbox_info_response, _parse_rich_outputs, _parse_template_response, _parse_template_list_response
 from ._sandbox_utils import build_sandbox_create_payload, build_list_templates_params, build_set_timeout_payload
+from .errors import SandboxExpiredError, SandboxErrorMetadata
 
 
 class AsyncSandbox:
@@ -527,6 +528,139 @@ class AsyncSandbox:
         """
         return await self.get_preview_url(7777)
 
+    # =============================================================================
+    # EXPIRY MANAGEMENT
+    # =============================================================================
+
+    async def get_time_to_expiry(self) -> Optional[int]:
+        """
+        Get seconds remaining until sandbox expires (async).
+
+        Returns:
+            Seconds until expiry, or None if no timeout is configured.
+            Negative values indicate the sandbox has already expired.
+
+        Example:
+            >>> ttl = await sandbox.get_time_to_expiry()
+            >>> if ttl is not None:
+            ...     print(f"Sandbox expires in {ttl} seconds")
+        """
+        info = await self.get_info()
+        if info.expires_at is None:
+            return None
+
+        now = datetime.now(info.expires_at.tzinfo)
+        return int((info.expires_at - now).total_seconds())
+
+    async def is_expiring_soon(self, threshold_seconds: int = 300) -> bool:
+        """
+        Check if sandbox expires within the given threshold (async).
+
+        Args:
+            threshold_seconds: Time threshold in seconds (default: 300 = 5 minutes)
+
+        Returns:
+            True if sandbox expires within threshold, False otherwise.
+
+        Example:
+            >>> if await sandbox.is_expiring_soon():
+            ...     await sandbox.set_timeout(600)
+        """
+        ttl = await self.get_time_to_expiry()
+        if ttl is None:
+            return False
+        return ttl <= threshold_seconds
+
+    async def get_expiry_info(self, expiring_soon_threshold: int = 300) -> ExpiryInfo:
+        """
+        Get comprehensive expiry information (async).
+
+        Args:
+            expiring_soon_threshold: Seconds threshold for "expiring soon" (default: 300)
+
+        Returns:
+            ExpiryInfo with detailed expiry state
+
+        Example:
+            >>> expiry = await sandbox.get_expiry_info()
+            >>> print(f"TTL: {expiry.time_to_expiry}s")
+            >>> print(f"Expiring soon: {expiry.is_expiring_soon}")
+        """
+        info = await self.get_info()
+        ttl = await self.get_time_to_expiry()
+
+        has_timeout = info.expires_at is not None
+        is_expired = ttl is not None and ttl < 0
+        is_expiring_soon = ttl is not None and ttl <= expiring_soon_threshold and ttl >= 0
+
+        return ExpiryInfo(
+            expires_at=info.expires_at,
+            time_to_expiry=ttl,
+            is_expired=is_expired,
+            is_expiring_soon=is_expiring_soon,
+            has_timeout=has_timeout,
+        )
+
+    # =============================================================================
+    # HEALTH CHECKS
+    # =============================================================================
+
+    async def is_healthy(self) -> bool:
+        """
+        Check if sandbox is ready for execution (async).
+
+        Returns:
+            True if sandbox is healthy and ready, False otherwise
+
+        Example:
+            >>> if await sandbox.is_healthy():
+            ...     result = await sandbox.run_code("print('Hello')")
+        """
+        try:
+            await self._ensure_agent_client()
+            response = await self._agent_client.get("/health", operation="health check")
+            return response.get("status") == "healthy"
+        except Exception:
+            return False
+
+    async def ensure_healthy(self) -> None:
+        """
+        Verify sandbox is healthy and ready for execution (async).
+
+        Raises:
+            SandboxExpiredError: If sandbox has expired
+            HopxError: If sandbox is not healthy
+
+        Example:
+            >>> try:
+            ...     await sandbox.ensure_healthy()
+            ...     result = await sandbox.run_code("print('Hello')")
+            ... except SandboxExpiredError:
+            ...     print("Sandbox expired")
+        """
+        from .errors import HopxError
+
+        # Check expiry first
+        expiry = await self.get_expiry_info()
+        if expiry.is_expired:
+            info = await self.get_info()
+            raise SandboxExpiredError(
+                message=f"Sandbox {self.sandbox_id} has expired",
+                metadata=SandboxErrorMetadata(
+                    sandbox_id=self.sandbox_id,
+                    created_at=str(info.created_at) if info.created_at else None,
+                    expires_at=str(info.expires_at) if info.expires_at else None,
+                    status=info.status,
+                )
+            )
+
+        # Check agent health
+        if not await self.is_healthy():
+            raise HopxError(
+                f"Sandbox {self.sandbox_id} is not healthy",
+                code="sandbox_unhealthy",
+            )
+
     async def pause(self) -> None:
         """Pause the sandbox (async)."""
         await self._client.post(f"/v1/sandboxes/{self.sandbox_id}/pause")
@@ -740,9 +874,10 @@ class AsyncSandbox:
         code: str,
         *,
         language: str = "python",
-        timeout_seconds: int = 60,
+        timeout_seconds: int = 120,
         env: Optional[Dict[str, str]] = None,
         working_dir: str = "/workspace",
+        preflight: bool = False,
     ):
         """
         Execute code with rich output capture (async).
@@ -750,13 +885,23 @@ class AsyncSandbox:
         Args:
             code: Code to execute
             language: Language (python, javascript, bash, go)
-            timeout_seconds: Execution timeout in seconds
+            timeout_seconds: Execution timeout in seconds (default: 120)
             env: Optional environment variables
             working_dir: Working directory
+            preflight: Run health check before execution (default: False).
+                       If True, raises SandboxExpiredError if sandbox expired.
 
         Returns:
             ExecutionResult with stdout, stderr, rich_outputs
+
+        Raises:
+            SandboxExpiredError: If preflight=True and sandbox has expired
+            HopxError: If preflight=True and sandbox is unhealthy
         """
+        # Run preflight health check if requested
+        if preflight:
+            await self.ensure_healthy()
+
         await self._ensure_agent_client()
 
         from .models import ExecutionResult

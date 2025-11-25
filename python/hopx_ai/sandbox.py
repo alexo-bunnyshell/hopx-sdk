@@ -12,7 +12,9 @@ from .models import (
     RichOutput,
     MetricsSnapshot,
     Language,
+    ExpiryInfo,
 )
+from .errors import SandboxExpiredError, SandboxErrorMetadata
 
 from ._client import HTTPClient
 from ._agent_client import AgentHTTPClient
@@ -1035,7 +1037,162 @@ class Sandbox:
             >>> # Output: https://7777-sandbox123.eu-1001.vms.hopx.dev/
         """
         return self.get_preview_url(7777)
-    
+
+    # =============================================================================
+    # EXPIRY MANAGEMENT
+    # =============================================================================
+
+    def get_time_to_expiry(self) -> Optional[int]:
+        """
+        Get seconds remaining until sandbox expires.
+
+        Returns:
+            Seconds until expiry, or None if no timeout is configured.
+            Negative values indicate the sandbox has already expired.
+
+        Example:
+            >>> ttl = sandbox.get_time_to_expiry()
+            >>> if ttl is not None:
+            ...     print(f"Sandbox expires in {ttl} seconds")
+            ... else:
+            ...     print("No timeout configured")
+        """
+        info = self.get_info()
+        if info.expires_at is None:
+            return None
+
+        now = datetime.now(info.expires_at.tzinfo)
+        return int((info.expires_at - now).total_seconds())
+
+    def is_expiring_soon(self, threshold_seconds: int = 300) -> bool:
+        """
+        Check if sandbox expires within the given threshold.
+
+        Args:
+            threshold_seconds: Time threshold in seconds (default: 300 = 5 minutes)
+
+        Returns:
+            True if sandbox expires within threshold, False otherwise.
+            Returns False if no timeout is configured.
+
+        Example:
+            >>> if sandbox.is_expiring_soon():
+            ...     sandbox.set_timeout(600)  # Extend by 10 minutes
+            ...     print("Extended sandbox timeout")
+        """
+        ttl = self.get_time_to_expiry()
+        if ttl is None:
+            return False
+        return ttl <= threshold_seconds
+
+    def get_expiry_info(self, expiring_soon_threshold: int = 300) -> ExpiryInfo:
+        """
+        Get comprehensive expiry information for the sandbox.
+
+        Args:
+            expiring_soon_threshold: Seconds threshold for "expiring soon" (default: 300)
+
+        Returns:
+            ExpiryInfo with detailed expiry state
+
+        Example:
+            >>> expiry = sandbox.get_expiry_info()
+            >>> print(f"Has timeout: {expiry.has_timeout}")
+            >>> print(f"Expires at: {expiry.expires_at}")
+            >>> print(f"TTL: {expiry.time_to_expiry}s")
+            >>> print(f"Expiring soon: {expiry.is_expiring_soon}")
+            >>> print(f"Expired: {expiry.is_expired}")
+        """
+        info = self.get_info()
+        ttl = self.get_time_to_expiry()
+
+        has_timeout = info.expires_at is not None
+        is_expired = ttl is not None and ttl < 0
+        is_expiring_soon = ttl is not None and ttl <= expiring_soon_threshold and ttl >= 0
+
+        return ExpiryInfo(
+            expires_at=info.expires_at,
+            time_to_expiry=ttl,
+            is_expired=is_expired,
+            is_expiring_soon=is_expiring_soon,
+            has_timeout=has_timeout,
+        )
+
+    # =============================================================================
+    # HEALTH CHECKS
+    # =============================================================================
+
+    def is_healthy(self) -> bool:
+        """
+        Check if sandbox is ready for execution.
+
+        Performs a quick health check against the sandbox agent. Useful for
+        verifying sandbox availability before running code.
+
+        Returns:
+            True if sandbox is healthy and ready, False otherwise
+
+        Example:
+            >>> if sandbox.is_healthy():
+            ...     result = sandbox.run_code("print('Hello')")
+            ... else:
+            ...     print("Sandbox not ready")
+        """
+        try:
+            self._ensure_agent_client()
+            response = self._agent_client.get(
+                "/health",
+                operation="health check",
+                timeout=5
+            )
+            data = response.json()
+            return data.get("status") == "healthy"
+        except Exception:
+            return False
+
+    def ensure_healthy(self) -> None:
+        """
+        Verify sandbox is healthy and ready for execution.
+
+        Raises SandboxExpiredError if sandbox has expired, or HopxError
+        for other health check failures.
+
+        Raises:
+            SandboxExpiredError: If sandbox has expired
+            HopxError: If sandbox is not healthy
+
+        Example:
+            >>> try:
+            ...     sandbox.ensure_healthy()
+            ...     result = sandbox.run_code("print('Hello')")
+            ... except SandboxExpiredError:
+            ...     print("Sandbox expired, create a new one")
+            ... except HopxError as e:
+            ...     print(f"Health check failed: {e}")
+        """
+        from .errors import HopxError
+
+        # Check expiry first
+        expiry = self.get_expiry_info()
+        if expiry.is_expired:
+            info = self.get_info()
+            raise SandboxExpiredError(
+                message=f"Sandbox {self.sandbox_id} has expired",
+                metadata=SandboxErrorMetadata(
+                    sandbox_id=self.sandbox_id,
+                    created_at=str(info.created_at) if info.created_at else None,
+                    expires_at=str(info.expires_at) if info.expires_at else None,
+                    status=info.status,
+                )
+            )
+
+        # Check agent health
+        if not self.is_healthy():
+            raise HopxError(
+                f"Sandbox {self.sandbox_id} is not healthy",
+                code="sandbox_unhealthy",
+            )
+
     def get_agent_info(self) -> Dict[str, Any]:
         """
         Get VM agent information.
@@ -1187,42 +1344,48 @@ class Sandbox:
         code: str,
         *,
         language: str = "python",
-        timeout: int = 60,
+        timeout: int = 120,
         env: Optional[Dict[str, str]] = None,
         working_dir: str = "/workspace",
+        preflight: bool = False,
     ) -> ExecutionResult:
         """
         Execute code with rich output capture (plots, DataFrames, etc.).
-        
+
         This method automatically captures visual outputs like matplotlib plots,
         pandas DataFrames, and plotly charts.
-        
+
         Args:
             code: Code to execute
             language: Language (python, javascript, bash, go)
-            timeout: Execution timeout in seconds (default: 60)
+            timeout: Execution timeout in seconds (default: 120)
             env: Optional environment variables for this execution only.
                  Priority: Request env > Global env > Agent env
             working_dir: Working directory for execution (default: /workspace)
-        
+            preflight: Run health check before execution (default: False).
+                       If True, raises SandboxExpiredError if sandbox expired,
+                       or HopxError if sandbox is unhealthy.
+
         Returns:
             ExecutionResult with stdout, stderr, rich_outputs
-        
+
         Raises:
             CodeExecutionError: If execution fails
             TimeoutError: If execution times out
-        
+            SandboxExpiredError: If preflight=True and sandbox has expired
+            HopxError: If preflight=True and sandbox is unhealthy
+
         Example:
             >>> # Simple code execution
             >>> result = sandbox.run_code('print("Hello, World!")')
             >>> print(result.stdout)  # "Hello, World!\n"
-            >>> 
+            >>>
             >>> # With environment variables
             >>> result = sandbox.run_code(
             ...     'import os; print(os.environ["API_KEY"])',
             ...     env={"API_KEY": "sk-test-123", "DEBUG": "true"}
             ... )
-            >>> 
+            >>>
             >>> # Execute with matplotlib plot
             >>> code = '''
             ... import matplotlib.pyplot as plt
@@ -1231,15 +1394,18 @@ class Sandbox:
             ... '''
             >>> result = sandbox.run_code(code)
             >>> print(f"Generated {result.rich_count} outputs")
-            >>> 
+            >>>
             >>> # Check for errors
             >>> result = sandbox.run_code('print(undefined_var)')
             >>> if not result.success:
             ...     print(f"Error: {result.stderr}")
-            >>> 
-            >>> # With custom timeout for long-running code
-            >>> result = sandbox.run_code(long_code, timeout=300)
+            >>>
+            >>> # With preflight health check
+            >>> result = sandbox.run_code(long_code, timeout=300, preflight=True)
         """
+        # Run preflight health check if requested
+        if preflight:
+            self.ensure_healthy()
         self._ensure_agent_client()
         
         logger.debug(f"Executing {language} code ({len(code)} chars)")

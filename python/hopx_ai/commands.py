@@ -49,7 +49,7 @@ class Commands(_CommandsBase):
         self,
         command: str,
         *,
-        timeout: int = 30,
+        timeout: int = 120,
         background: bool = False,
         env: Optional[Dict[str, str]] = None,
         working_dir: str = "/workspace",
@@ -59,7 +59,7 @@ class Commands(_CommandsBase):
 
         Args:
             command: Shell command to run
-            timeout: Command timeout in seconds (default: 30)
+            timeout: Command timeout in seconds (default: 120)
             background: Run in background (returns immediately)
             env: Optional environment variables for this command only.
                  Priority: Request env > Global env > Agent env
@@ -122,7 +122,7 @@ class Commands(_CommandsBase):
     def _run_background(
         self,
         command: str,
-        timeout: int = 30,
+        timeout: int = 120,
         env: Optional[Dict[str, str]] = None,
         working_dir: str = "/workspace"
     ) -> CommandResult:
@@ -131,7 +131,7 @@ class Commands(_CommandsBase):
 
         Args:
             command: Shell command to run
-            timeout: Command timeout in seconds (default: 30)
+            timeout: Command timeout in seconds (default: 120)
             env: Optional environment variables
             working_dir: Working directory
 

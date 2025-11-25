@@ -1,6 +1,7 @@
 """HOPX.AI SDK exceptions."""
 
 from typing import Optional, Dict, Any, List
+from dataclasses import dataclass
 
 # Import ErrorCode enum from generated models for type-safe error codes
 from .models import ErrorCode
@@ -13,13 +14,30 @@ __all__ = [
     "NotFoundError",
     "ValidationError",
     "ResourceLimitError",
+    "ServerError",
+    "NetworkError",
+    "TimeoutError",
     "AgentError",
     "FileNotFoundError",
     "FileOperationError",
     "CodeExecutionError",
     "CommandExecutionError",
     "DesktopNotAvailableError",
+    # Sandbox lifecycle errors
+    "SandboxExpiredError",
+    "TokenExpiredError",
+    "SandboxErrorMetadata",
 ]
+
+
+@dataclass
+class SandboxErrorMetadata:
+    """Metadata about sandbox state when an error occurs."""
+    sandbox_id: Optional[str] = None
+    created_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    time_to_live: Optional[int] = None
+    status: Optional[str] = None
 
 
 class HopxError(Exception):
@@ -205,7 +223,7 @@ class CommandExecutionError(AgentError):
 
 class DesktopNotAvailableError(AgentError):
     """Desktop automation not available in this sandbox."""
-    
+
     def __init__(
         self,
         message: str = "Desktop automation not available",
@@ -218,7 +236,7 @@ class DesktopNotAvailableError(AgentError):
         self.missing_dependencies = missing_dependencies or []
         self.docs_url = "https://docs.hopx.ai/desktop-automation"
         self.install_command = self._get_install_command()
-    
+
     def _get_install_command(self) -> str:
         """Generate install command for missing dependencies."""
         if not self.missing_dependencies:
@@ -234,9 +252,9 @@ class DesktopNotAvailableError(AgentError):
                 "tesseract-ocr"
             ]
             return f"apt-get update && apt-get install -y {' '.join(deps)}"
-        
+
         return f"apt-get install -y {' '.join(self.missing_dependencies)}"
-    
+
     def __str__(self) -> str:
         msg = super().__str__()
         if self.missing_dependencies:
@@ -246,4 +264,43 @@ class DesktopNotAvailableError(AgentError):
             msg += f"\n\nTo enable desktop automation, add to your Dockerfile:"
             msg += f"\nRUN {self.install_command}"
         return msg
+
+
+# =============================================================================
+# SANDBOX LIFECYCLE ERRORS
+# =============================================================================
+
+class SandboxExpiredError(HopxError):
+    """Sandbox has expired and is no longer available."""
+
+    def __init__(
+        self,
+        message: str = "Sandbox has expired",
+        metadata: Optional[SandboxErrorMetadata] = None,
+        **kwargs
+    ):
+        kwargs.setdefault('code', 'sandbox_expired')
+        kwargs.setdefault('status_code', 410)
+        super().__init__(message, **kwargs)
+        self.metadata = metadata or SandboxErrorMetadata()
+        self.sandbox_id = self.metadata.sandbox_id
+        self.created_at = self.metadata.created_at
+        self.expires_at = self.metadata.expires_at
+
+    def __str__(self) -> str:
+        msg = super().__str__()
+        if self.sandbox_id:
+            msg += f" (sandbox_id: {self.sandbox_id})"
+        if self.expires_at:
+            msg += f" [expired at: {self.expires_at}]"
+        return msg
+
+
+class TokenExpiredError(AuthenticationError):
+    """JWT token has expired."""
+
+    def __init__(self, message: str = "JWT token has expired", **kwargs):
+        kwargs.setdefault('code', 'token_expired')
+        kwargs.setdefault('status_code', 401)
+        super().__init__(message, **kwargs)
 
