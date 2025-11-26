@@ -5,6 +5,86 @@ All notable changes to the Hopx JavaScript/TypeScript SDK will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.6] - 2025-11-26
+
+### Fixed
+
+**Critical: Token Refresh Callback Never Invoked on 401 Errors**
+- Fixed token refresh mechanism not triggering when JWT tokens expire
+- **Root Cause**: Response interceptor transformed 401 errors to `AuthenticationError` before `requestWithRetry` could handle token refresh. The token refresh check used `axios.isAxiosError(error)` which returned `false` for custom error types
+- **Impact**: 401 Unauthorized errors always threw `AuthenticationError` instead of attempting token refresh. Long-lived sandbox sessions would fail after token expiry
+- **Resolution**: Modified response interceptor to pass 401 errors through as raw AxiosErrors, allowing `requestWithRetry` to handle token refresh properly
+- **Files Modified**: `src/client.ts` (lines 69-83)
+
+**Fixed: Infinite Loop Risk in Token Refresh**
+- Fixed potential infinite loop when token refresh returns an invalid token
+- **Root Cause**: After successful token refresh, `requestWithRetry` was called with same `attempt` value instead of `attempt + 1`
+- **Impact**: If token refresh succeeded but returned an invalid token, the retry loop would never terminate
+- **Resolution**: Changed `attempt` to `attempt + 1` when retrying after token refresh
+- **Files Modified**: `src/client.ts` (line 131)
+
+---
+
+## [0.3.5] - 2025-11-26
+
+### Fixed
+
+**Critical: HTTP Client Timeout Ignoring User-Specified Timeouts**
+- Fixed HTTP client using hardcoded 60-second timeout regardless of user-specified execution timeouts
+- **Root Cause**: `agentClient` was created with `timeout: 60000` (60s). User timeouts like `runCode({timeout: 300})` only went to API payload, not the HTTP request config
+- **Impact**: Operations taking longer than 60 seconds failed with HTTP timeout even when API timeout was set higher (e.g., 300 seconds)
+- **Resolution**: Pass HTTP timeout config to axios for all execution methods. HTTP timeout = API timeout + 30s buffer
+- **Affected Methods**:
+  - `sandbox.runCode()` - HTTP timeout now matches API timeout + 30s buffer
+  - `sandbox.runCodeAsync()` - HTTP timeout now matches API timeout + 30s buffer
+  - `sandbox.runCodeBackground()` - Uses 30s HTTP timeout (returns immediately)
+  - `sandbox.runIpython()` - HTTP timeout now matches API timeout + 30s buffer
+  - `sandbox.commands.run()` - HTTP timeout now matches API timeout + 30s buffer
+  - `sandbox.commands.runBackground()` - Uses 30s HTTP timeout (returns immediately)
+- **Files Modified**: `src/sandbox.ts`, `src/resources/commands.ts`
+
+**Buffer Strategy**: HTTP timeout is set to API timeout + 30 seconds to account for network latency and API processing overhead. Background operations use fixed 30s HTTP timeout since they return immediately.
+
+---
+
+## [0.3.4] - 2025-11-25
+
+### Added
+
+**Sandbox Expiry Management**
+- `getTimeToExpiry()` - Get seconds remaining until sandbox expires
+- `isExpiringSoon(threshold?)` - Check if sandbox expires within threshold (default: 5 minutes)
+- `getExpiryInfo()` - Get comprehensive expiry information including `expiresAt`, `timeToExpiry`, `isExpired`, `isExpiringSoon`
+- `startExpiryMonitor(callback, threshold?, interval?)` - Proactive monitoring with callback when sandbox is about to expire
+- `stopExpiryMonitor()` - Stop expiry monitoring
+- `onExpiringSoon` callback option in `Sandbox.create()` - Auto-start monitoring when sandbox is created
+
+**Health Check Methods**
+- `isHealthy()` - Check if sandbox is ready for execution (returns boolean)
+- `ensureHealthy()` - Verify sandbox is healthy, throws `SandboxExpiredError` if expired or `HopxError` if not running
+- `preflight` option for `runCode()` - Run health check before code execution
+
+**Structured Error Types**
+- `SandboxExpiredError` - Thrown when sandbox has expired, includes metadata (sandboxId, createdAt, expiresAt, status)
+- `TokenExpiredError` - Thrown when JWT token has expired
+- `ErrorCode` enum exported for programmatic error handling
+- `SandboxErrorMetadata` type exported for error metadata access
+
+**TypeScript Types**
+- `ExpiryInfo` interface for expiry information
+- `SandboxErrorMetadata` interface for error metadata
+
+### Changed
+
+**Default Timeouts Increased**
+- `runCode()` timeout increased from 60s to 120s
+- Background commands timeout increased from 60s to 120s
+- Sync commands remain at 30s (suitable for quick operations)
+
+**Impact**: Long-running operations like package installations (`npm install`, `pip install`) are less likely to timeout with default settings.
+
+---
+
 ## [0.3.3] - 2025-11-20
 
 ### Fixed

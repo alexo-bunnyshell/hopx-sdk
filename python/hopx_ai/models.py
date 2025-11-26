@@ -280,6 +280,27 @@ class Template(BaseModel):
 
 
 # =============================================================================
+# EXPIRY INFO (for sandbox lifecycle management)
+# =============================================================================
+
+class ExpiryInfo(BaseModel):
+    """Comprehensive sandbox expiry information."""
+
+    expires_at: Optional[datetime] = Field(None, description="When sandbox will expire")
+    time_to_expiry: Optional[int] = Field(None, description="Seconds until expiry (negative if expired)")
+    is_expired: bool = Field(False, description="Whether sandbox has expired")
+    is_expiring_soon: bool = Field(False, description="Whether sandbox expires within threshold (default: 5 minutes)")
+    has_timeout: bool = Field(False, description="Whether sandbox has a timeout configured")
+
+    def __repr__(self) -> str:
+        if not self.has_timeout:
+            return "<ExpiryInfo no_timeout>"
+        if self.is_expired:
+            return "<ExpiryInfo EXPIRED>"
+        return f"<ExpiryInfo ttl={self.time_to_expiry}s expiring_soon={self.is_expiring_soon}>"
+
+
+# =============================================================================
 # EXPORTS
 # =============================================================================
 
@@ -293,13 +314,14 @@ __all__ = [
     "WindowInfo",
     "RecordingInfo",
     "DisplayInfo",
-    
+
     # Hand-crafted models
     "SandboxInfo",
     "Template",
     "Resources",
     "TemplateResources",
-    
+    "ExpiryInfo",
+
     # Auto-generated models (direct exports)
     "Language",
     "ErrorResponse",

@@ -13,6 +13,8 @@ import {
   FileNotFoundError,
   FileOperationError,
   DesktopNotAvailableError,
+  SandboxExpiredError,
+  TokenExpiredError,
   ErrorCode,
 } from './errors.js';
 
@@ -67,9 +69,13 @@ export class HTTPClient {
     this.client.interceptors.response.use(
       (response) => response,
       (error) => {
-        // For retryable errors, pass through to let retry logic handle
-        if (this.isRetryableError(error) || this.isNetworkError(error)) {
-          return Promise.reject(error); // Keep as AxiosError for retry
+        const status = error.response?.status;
+        // Pass through errors that requestWithRetry needs to handle:
+        // - 5xx (retryable server errors)
+        // - Network errors (retryable connectivity issues)
+        // - 401 (token refresh - must remain as AxiosError for refresh logic)
+        if (this.isRetryableError(error) || this.isNetworkError(error) || status === 401) {
+          return Promise.reject(error); // Keep as AxiosError for retry/refresh
         }
         // For non-retryable errors, transform to custom error
         return this.handleError(error);
@@ -114,7 +120,7 @@ export class HTTPClient {
       const response = await requestFn();
       return response.data;
     } catch (error) {
-      // ✅ NEW: Handle 401 Unauthorized - try to refresh token
+      // Handle 401 Unauthorized - try to refresh token (only on first attempt)
       if (axios.isAxiosError(error) && error.response?.status === 401 && this.tokenRefreshCallback && attempt === 1) {
         console.log('[SDK] Got 401 Unauthorized, attempting token refresh...');
         try {
@@ -122,7 +128,7 @@ export class HTTPClient {
           if (newToken) {
             this.updateJwtToken(newToken);
             console.log('[SDK] Token refreshed, retrying request...');
-            return this.requestWithRetry(requestFn, attempt);  // Retry with same attempt number
+            return this.requestWithRetry(requestFn, attempt + 1);  // Increment to prevent infinite loop
           }
         } catch (refreshError) {
           console.error('[SDK] Token refresh failed:', refreshError);
@@ -169,7 +175,26 @@ export class HTTPClient {
     const errorCode = data?.code as ErrorCode | undefined;
     const message = String(data?.message || data?.error?.message || error.message || 'Unknown error');
 
-    // Authentication errors
+    // Sandbox expiry detection (410 Gone or specific error codes)
+    if (
+      errorCode === ErrorCode.SANDBOX_EXPIRED ||
+      status === 410 ||
+      (status === 404 && message.toLowerCase().includes('sandbox') && message.toLowerCase().includes('not found'))
+    ) {
+      throw new SandboxExpiredError(message, {
+        sandboxId: data?.sandbox_id,
+        createdAt: data?.created_at,
+        expiresAt: data?.expires_at,
+        status: data?.status,
+      }, requestId);
+    }
+
+    // Token expiry detection
+    if (status === 401 && (errorCode === ErrorCode.TOKEN_EXPIRED || message.toLowerCase().includes('token expired'))) {
+      throw new TokenExpiredError(message, requestId);
+    }
+
+    // Authentication errors (general)
     if (status === 401) {
       throw new AuthenticationError(message, requestId);
     }

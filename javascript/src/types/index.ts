@@ -172,6 +172,8 @@ export interface SandboxCreateOptions {
   envVars?: Record<string, string>;
   apiKey?: string;
   baseURL?: string;
+  onExpiringSoon?: (info: ExpiryInfo) => void;  // Called when sandbox is about to expire
+  expiryWarningThreshold?: number;  // Seconds before expiry to trigger warning (default: 300)
 }
 
 export interface SandboxInfo {
@@ -412,6 +414,7 @@ export interface CodeExecutionOptions {
   timeout?: number;
   env?: Record<string, string>;
   workingDir?: string;
+  preflight?: boolean;  // Run health check before execution
 }
 
 export interface AsyncExecutionOptions extends CodeExecutionOptions {
@@ -474,5 +477,17 @@ export interface StreamOptions {
 
 export interface FileWatchOptions {
   timeout?: number;
+}
+
+// =============================================================================
+// EXPIRY INFO
+// =============================================================================
+
+export interface ExpiryInfo {
+  expiresAt: Date | null;
+  timeToExpiry: number | null;  // seconds (negative if expired)
+  isExpired: boolean;
+  isExpiringSoon: boolean;  // < 5 minutes by default
+  hasTimeout: boolean;
 }
 

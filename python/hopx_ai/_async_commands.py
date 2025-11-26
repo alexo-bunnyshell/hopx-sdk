@@ -26,7 +26,7 @@ class AsyncCommands(_CommandsBase):
         self,
         command: str,
         *,
-        timeout_seconds: int = 60,
+        timeout_seconds: int = 120,
         background: bool = False,
         env: Optional[Dict[str, str]] = None,
         working_dir: str = "/workspace"
@@ -36,7 +36,7 @@ class AsyncCommands(_CommandsBase):
 
         Args:
             command: Shell command to run
-            timeout_seconds: Command timeout in seconds (default: 60)
+            timeout_seconds: Command timeout in seconds (default: 120)
             background: Run in background (returns immediately)
             env: Optional environment variables for this command only
             working_dir: Working directory for command (default: /workspace)
@@ -58,7 +58,8 @@ class AsyncCommands(_CommandsBase):
             "/commands/run",
             json=payload,
             operation="run command",
-            context={"command": command}
+            context={"command": command},
+            timeout=timeout_seconds + 30  # Add buffer to HTTP timeout for network latency
         )
 
         return ExecutionResult(
@@ -73,7 +74,7 @@ class AsyncCommands(_CommandsBase):
     async def _run_background(
         self,
         command: str,
-        timeout: int = 30,
+        timeout: int = 120,
         env: Optional[Dict[str, str]] = None,
         working_dir: str = "/workspace"
     ) -> ExecutionResult:
@@ -82,7 +83,7 @@ class AsyncCommands(_CommandsBase):
 
         Args:
             command: Shell command to run
-            timeout: Command timeout in seconds (default: 30)
+            timeout: Command timeout in seconds (default: 120)
             env: Optional environment variables
             working_dir: Working directory
 

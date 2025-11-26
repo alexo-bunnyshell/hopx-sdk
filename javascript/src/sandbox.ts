@@ -10,7 +10,7 @@ import { EnvironmentVariables } from './resources/env-vars.js';
 import { Cache } from './resources/cache.js';
 import { Desktop } from './resources/desktop.js';
 import { Terminal } from './resources/terminal.js';
-import { HopxError } from './errors.js';
+import { HopxError, SandboxExpiredError, ErrorCode } from './errors.js';
 import type {
   SandboxCreateOptions,
   TemplateInfo,
@@ -29,6 +29,7 @@ import type {
   StreamMessage,
   FileChangeMessage,
   RichOutput,
+  ExpiryInfo,
 } from './types/index.js';
 import { ExecutionResultImpl } from './types/index.js';
 
@@ -55,6 +56,7 @@ export class Sandbox {
   private _cache?: Cache;
   private _desktop?: Desktop;
   private _terminal?: Terminal;
+  private expiryMonitorInterval?: ReturnType<typeof setInterval>;
 
   public readonly sandboxId: string;
 
@@ -152,6 +154,14 @@ export class Sandbox {
     // We must explicitly set them via the Agent API after sandbox creation.
     if (options.envVars && Object.keys(options.envVars).length > 0) {
       await sandbox.env.update(options.envVars);
+    }
+
+    // Start expiry monitor if callback provided
+    if (options.onExpiringSoon) {
+      sandbox.startExpiryMonitor(
+        options.onExpiringSoon,
+        options.expiryWarningThreshold ?? 300
+      );
     }
 
     return sandbox;
@@ -729,10 +739,19 @@ export class Sandbox {
   /**
    * Execute code synchronously
    * @param code - Code to execute
-   * @param options - Execution options
+   * @param options - Execution options (timeout default: 120s)
    */
   async runCode(code: string, options?: CodeExecutionOptions): Promise<ExecutionResult> {
+    // Preflight health check if requested
+    if (options?.preflight) {
+      await this.ensureHealthy();
+    }
+
     await this.ensureAgentClient();
+
+    const apiTimeout = options?.timeout ?? 120;
+    // HTTP timeout = API timeout + 30s buffer for network/processing overhead
+    const httpTimeout = (apiTimeout + 30) * 1000;
 
     const response = await this.agentClient!.post<ExecuteResponse & {
       png?: string;
@@ -744,10 +763,11 @@ export class Sandbox {
       {
         code,
         language: options?.language ?? 'python',
-        timeout: options?.timeout ?? 60,
+        timeout: apiTimeout,
         workdir: options?.workingDir ?? '/workspace',
         env: options?.env,
-      }
+      },
+      { timeout: httpTimeout }
     );
 
     // Parse rich outputs from Jupyter (agent returns: .png, .html, .json, .result)
@@ -790,39 +810,63 @@ export class Sandbox {
   async runCodeAsync(code: string, options: AsyncExecutionOptions): Promise<AsyncExecuteResponse> {
     await this.ensureAgentClient();
 
-    return this.agentClient!.post<AsyncExecuteResponse>('/execute/async', {
-      code,
-      language: options.language ?? 'python',
-      timeout: options.timeout ?? 1800,
-      workdir: options.workingDir ?? '/workspace',
-      env: options.env,
-      callback_url: options.callbackUrl,
-      callback_headers: options.callbackHeaders,
-      callback_signature_secret: options.callbackSignatureSecret,
-    });
+    const apiTimeout = options.timeout ?? 1800;
+    // HTTP timeout = API timeout + 30s buffer for network/processing overhead
+    const httpTimeout = (apiTimeout + 30) * 1000;
+
+    return this.agentClient!.post<AsyncExecuteResponse>(
+      '/execute/async',
+      {
+        code,
+        language: options.language ?? 'python',
+        timeout: apiTimeout,
+        workdir: options.workingDir ?? '/workspace',
+        env: options.env,
+        callback_url: options.callbackUrl,
+        callback_headers: options.callbackHeaders,
+        callback_signature_secret: options.callbackSignatureSecret,
+      },
+      { timeout: httpTimeout }
+    );
   }
 
   async runCodeBackground(code: string, options?: BackgroundExecutionOptions): Promise<BackgroundExecuteResponse> {
     await this.ensureAgentClient();
 
-    return this.agentClient!.post<BackgroundExecuteResponse>('/execute/background', {
-      code,
-      language: options?.language ?? 'python',
-      timeout: options?.timeout ?? 300,
-      workdir: options?.workingDir ?? '/workspace',
-      env: options?.env,
-      name: options?.name,
-    });
+    const apiTimeout = options?.timeout ?? 300;
+    // Background operations return immediately - 30s HTTP timeout is sufficient
+    const httpTimeout = 30000;
+
+    return this.agentClient!.post<BackgroundExecuteResponse>(
+      '/execute/background',
+      {
+        code,
+        language: options?.language ?? 'python',
+        timeout: apiTimeout,
+        workdir: options?.workingDir ?? '/workspace',
+        env: options?.env,
+        name: options?.name,
+      },
+      { timeout: httpTimeout }
+    );
   }
 
   async runIpython(code: string, options?: Omit<CodeExecutionOptions, 'language'>): Promise<ExecutionResult> {
     await this.ensureAgentClient();
 
-    const response = await this.agentClient!.post<ExecuteResponse>('/execute/ipython', {
-      code,
-      timeout: options?.timeout ?? 60,
-      env: options?.env,
-    });
+    const apiTimeout = options?.timeout ?? 60;
+    // HTTP timeout = API timeout + 30s buffer for network/processing overhead
+    const httpTimeout = (apiTimeout + 30) * 1000;
+
+    const response = await this.agentClient!.post<ExecuteResponse>(
+      '/execute/ipython',
+      {
+        code,
+        timeout: apiTimeout,
+        env: options?.env,
+      },
+      { timeout: httpTimeout }
+    );
 
     return new ExecutionResultImpl(response);
   }
@@ -930,6 +974,187 @@ export class Sandbox {
   async getAgentInfo(): Promise<InfoResponse> {
     await this.ensureAgentClient();
     return this.agentClient!.get<InfoResponse>('/info');
+  }
+
+  // ==========================================================================
+  // HEALTH CHECK METHODS
+  // ==========================================================================
+
+  /**
+   * Check if sandbox is ready for execution
+   * Returns false if sandbox is expired, stopped, or unresponsive
+   */
+  async isHealthy(): Promise<boolean> {
+    try {
+      const health = await this.getHealth();
+      return health.status === 'ok' || health.status === 'healthy';
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Verify sandbox is healthy, throw if not
+   * @throws SandboxExpiredError if sandbox has expired
+   * @throws HopxError if sandbox is not healthy
+   */
+  async ensureHealthy(): Promise<void> {
+    const info = await this.getInfo();
+
+    // Check expiry
+    if (info.expiresAt) {
+      const expiresAt = new Date(info.expiresAt);
+      const now = new Date();
+      if (now >= expiresAt) {
+        throw new SandboxExpiredError(
+          `Sandbox ${this.sandboxId} has expired`,
+          {
+            sandboxId: this.sandboxId,
+            expiresAt: info.expiresAt,
+            createdAt: info.createdAt,
+            status: info.status,
+          }
+        );
+      }
+    }
+
+    // Check status
+    if (info.status !== 'running') {
+      throw new HopxError(
+        `Sandbox ${this.sandboxId} is not running (status: ${info.status})`,
+        ErrorCode.INVALID_REQUEST
+      );
+    }
+
+    // Check agent health
+    try {
+      const health = await this.getHealth();
+      if (health.status !== 'ok' && health.status !== 'healthy') {
+        throw new HopxError(
+          `Sandbox agent is not healthy: ${health.status}`,
+          ErrorCode.INTERNAL_ERROR
+        );
+      }
+    } catch (error) {
+      if (error instanceof HopxError) throw error;
+      throw new HopxError(
+        `Failed to verify sandbox health: ${(error as Error).message}`,
+        ErrorCode.INTERNAL_ERROR
+      );
+    }
+  }
+
+  // ==========================================================================
+  // EXPIRY MANAGEMENT
+  // ==========================================================================
+
+  /**
+   * Get time remaining until sandbox expires
+   * @returns Seconds until expiry (negative if expired), or null if no timeout set
+   */
+  async getTimeToExpiry(): Promise<number | null> {
+    const info = await this.getInfo();
+
+    if (!info.expiresAt) {
+      return null;
+    }
+
+    const expiresAt = new Date(info.expiresAt);
+    const now = new Date();
+    const secondsRemaining = Math.floor((expiresAt.getTime() - now.getTime()) / 1000);
+
+    return secondsRemaining;
+  }
+
+  /**
+   * Check if sandbox will expire within the specified threshold
+   * @param thresholdSeconds Seconds threshold (default: 300 = 5 minutes)
+   * @returns true if expiring soon, false otherwise, null if no timeout
+   */
+  async isExpiringSoon(thresholdSeconds: number = 300): Promise<boolean | null> {
+    const timeToExpiry = await this.getTimeToExpiry();
+
+    if (timeToExpiry === null) {
+      return null;
+    }
+
+    return timeToExpiry <= thresholdSeconds;
+  }
+
+  /**
+   * Get comprehensive expiry information
+   */
+  async getExpiryInfo(): Promise<ExpiryInfo> {
+    const info = await this.getInfo();
+
+    if (!info.expiresAt) {
+      return {
+        expiresAt: null,
+        timeToExpiry: null,
+        isExpired: false,
+        isExpiringSoon: false,
+        hasTimeout: false,
+      };
+    }
+
+    const expiresAt = new Date(info.expiresAt);
+    const now = new Date();
+    const timeToExpiry = Math.floor((expiresAt.getTime() - now.getTime()) / 1000);
+
+    return {
+      expiresAt,
+      timeToExpiry,
+      isExpired: timeToExpiry <= 0,
+      isExpiringSoon: timeToExpiry > 0 && timeToExpiry <= 300,
+      hasTimeout: true,
+    };
+  }
+
+  /**
+   * Start monitoring for expiry warnings
+   * @param callback Function called when sandbox is expiring soon
+   * @param thresholdSeconds Seconds before expiry to trigger (default: 300)
+   * @param checkIntervalSeconds How often to check (default: 30)
+   */
+  startExpiryMonitor(
+    callback: (info: ExpiryInfo) => void,
+    thresholdSeconds: number = 300,
+    checkIntervalSeconds: number = 30
+  ): void {
+    if (this.expiryMonitorInterval) {
+      this.stopExpiryMonitor();
+    }
+
+    let warningTriggered = false;
+
+    this.expiryMonitorInterval = setInterval(async () => {
+      try {
+        const info = await this.getExpiryInfo();
+
+        if (!warningTriggered && info.timeToExpiry !== null && info.timeToExpiry <= thresholdSeconds) {
+          warningTriggered = true;
+          callback(info);
+        }
+
+        // Stop monitoring if expired
+        if (info.isExpired) {
+          this.stopExpiryMonitor();
+        }
+      } catch (error) {
+        // Sandbox may have been killed, stop monitoring
+        this.stopExpiryMonitor();
+      }
+    }, checkIntervalSeconds * 1000);
+  }
+
+  /**
+   * Stop expiry monitoring
+   */
+  stopExpiryMonitor(): void {
+    if (this.expiryMonitorInterval) {
+      clearInterval(this.expiryMonitorInterval);
+      this.expiryMonitorInterval = undefined;
+    }
   }
 
   // ==========================================================================

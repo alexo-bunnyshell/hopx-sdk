@@ -46,8 +46,14 @@ export {
   DesktopNotAvailableError,
   ResourceLimitError,
   RateLimitError,
-  ServerError
+  ServerError,
+  SandboxExpiredError,
+  TokenExpiredError,
+  ErrorCode,
 } from './errors.js';
+
+// Re-export SandboxErrorMetadata type
+export type { SandboxErrorMetadata } from './errors.js';
 
 // Default export
 export { Sandbox as default } from './sandbox.js';

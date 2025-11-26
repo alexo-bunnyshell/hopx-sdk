@@ -7,7 +7,7 @@ export enum ErrorCode {
   METHOD_NOT_ALLOWED = 'METHOD_NOT_ALLOWED',
   INVALID_JSON = 'INVALID_JSON',
   MISSING_PARAMETER = 'MISSING_PARAMETER',
-  
+
   // File errors
   PATH_NOT_ALLOWED = 'PATH_NOT_ALLOWED',
   FILE_NOT_FOUND = 'FILE_NOT_FOUND',
@@ -16,21 +16,29 @@ export enum ErrorCode {
   FILE_OPERATION_FAILED = 'FILE_OPERATION_FAILED',
   INVALID_PATH = 'INVALID_PATH',
   PERMISSION_DENIED = 'PERMISSION_DENIED',
-  
+
   // Execution errors
   COMMAND_FAILED = 'COMMAND_FAILED',
   EXECUTION_TIMEOUT = 'EXECUTION_TIMEOUT',
   EXECUTION_FAILED = 'EXECUTION_FAILED',
-  
+
   // Process errors
   PROCESS_NOT_FOUND = 'PROCESS_NOT_FOUND',
-  
+
   // Desktop errors
   DESKTOP_NOT_AVAILABLE = 'DESKTOP_NOT_AVAILABLE',
-  
+
   // System errors
   INVALID_REQUEST = 'INVALID_REQUEST',
   INTERNAL_ERROR = 'INTERNAL_ERROR',
+
+  // Sandbox lifecycle errors
+  SANDBOX_EXPIRED = 'SANDBOX_EXPIRED',
+  SANDBOX_NOT_FOUND = 'SANDBOX_NOT_FOUND',
+  SANDBOX_CREATING = 'SANDBOX_CREATING',
+  SANDBOX_STOPPED = 'SANDBOX_STOPPED',
+  TOKEN_EXPIRED = 'TOKEN_EXPIRED',
+  TOKEN_INVALID = 'TOKEN_INVALID',
 }
 
 export class HopxError extends Error {
@@ -140,6 +148,46 @@ export class ResourceLimitError extends HopxError {
   constructor(message: string, requestId?: string) {
     super(message, undefined, requestId, 429);
     this.name = 'ResourceLimitError';
+  }
+}
+
+/**
+ * Metadata about sandbox state when an error occurs
+ */
+export interface SandboxErrorMetadata {
+  sandboxId?: string;
+  createdAt?: string;
+  expiresAt?: string;
+  timeToLive?: number;
+  status?: string;
+}
+
+/**
+ * Error thrown when sandbox has expired
+ */
+export class SandboxExpiredError extends HopxError {
+  public readonly sandboxId?: string;
+  public readonly createdAt?: string;
+  public readonly expiresAt?: string;
+  public readonly metadata: SandboxErrorMetadata;
+
+  constructor(message: string, metadata: SandboxErrorMetadata, requestId?: string) {
+    super(message, ErrorCode.SANDBOX_EXPIRED, requestId, 410);
+    this.name = 'SandboxExpiredError';
+    this.sandboxId = metadata.sandboxId;
+    this.createdAt = metadata.createdAt;
+    this.expiresAt = metadata.expiresAt;
+    this.metadata = metadata;
+  }
+}
+
+/**
+ * Error thrown when JWT token has expired
+ */
+export class TokenExpiredError extends HopxError {
+  constructor(message = 'JWT token has expired', requestId?: string) {
+    super(message, ErrorCode.TOKEN_EXPIRED, requestId, 401);
+    this.name = 'TokenExpiredError';
   }
 }
 

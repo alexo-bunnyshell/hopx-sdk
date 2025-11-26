@@ -5,11 +5,11 @@ Official Python client for Hopx Sandboxes.
 
 Sync Example:
     >>> from hopx_ai import Sandbox
-    >>> 
+    >>>
     >>> # Create sandbox
     >>> sandbox = Sandbox.create(template="code-interpreter")
     >>> print(sandbox.get_info().public_host)
-    >>> 
+    >>>
     >>> # Cleanup
     >>> sandbox.kill()
 
@@ -32,6 +32,7 @@ from .models import (
     CommandResult,
     FileInfo,
     RichOutput,
+    ExpiryInfo,
     # Desktop models
     VNCInfo,
     WindowInfo,
@@ -56,6 +57,10 @@ from .errors import (
     CodeExecutionError,
     CommandExecutionError,
     DesktopNotAvailableError,
+    # Sandbox lifecycle errors
+    SandboxExpiredError,
+    TokenExpiredError,
+    SandboxErrorMetadata,
 )
 # Template Building
 from .template import (
@@ -68,7 +73,7 @@ from .template import (
     wait_for_command,
 )
 
-__version__ = "0.3.3"
+__version__ = "0.3.6"
 __all__ = [
     "Sandbox",
     "AsyncSandbox",
@@ -79,6 +84,7 @@ __all__ = [
     "CommandResult",
     "FileInfo",
     "RichOutput",
+    "ExpiryInfo",
     # Desktop models
     "VNCInfo",
     "WindowInfo",
@@ -102,6 +108,10 @@ __all__ = [
     "CodeExecutionError",
     "CommandExecutionError",
     "DesktopNotAvailableError",
+    # Sandbox lifecycle errors
+    "SandboxExpiredError",
+    "TokenExpiredError",
+    "SandboxErrorMetadata",
     # Template Building
     "Template",
     "create_template",
