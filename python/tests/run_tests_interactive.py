@@ -50,7 +50,11 @@ def get_test_classes_and_methods(file_path):
 
 def build_test_hierarchy():
     """Build hierarchical structure of tests."""
-    base_dir = Path('tests')
+    # Get the directory where this script is located (python/tests/)
+    script_dir = Path(__file__).parent.resolve()
+    base_dir = script_dir
+    python_dir = base_dir.parent  # python/ directory
+    
     hierarchy = {
         'integration': {},
         'e2e': {}
@@ -72,11 +76,12 @@ def build_test_hierarchy():
                 current[part] = {'_type': 'category'}
             current = current[part]
         
-        # Add file with classes
+        # Add file with classes - store path relative to python/ directory
         classes = get_test_classes_and_methods(file_path)
+        test_path_rel = file_path.relative_to(python_dir)
         current[filename] = {
             '_type': 'file',
-            '_path': str(file_path),
+            '_path': str(test_path_rel),
             '_classes': classes
         }
     
@@ -95,10 +100,12 @@ def build_test_hierarchy():
                 current[part] = {'_type': 'category'}
             current = current[part]
         
+        # Add file with classes - store path relative to python/ directory
         classes = get_test_classes_and_methods(file_path)
+        test_path_rel = file_path.relative_to(python_dir)
         current[filename] = {
             '_type': 'file',
-            '_path': str(file_path),
+            '_path': str(test_path_rel),
             '_classes': classes
         }
     
@@ -185,6 +192,10 @@ def display_menu(items, title, breadcrumb="", show_back=True, show_run_all=False
 
 def get_pytest_command(test_path, test_name="", verbose=True, generate_reports=True):
     """Build pytest command with options."""
+    # Get the tests directory (where this script is located)
+    script_dir = Path(__file__).parent.resolve()
+    base_dir = script_dir
+    
     cmd = ['pytest']
     
     if verbose:
@@ -213,7 +224,7 @@ def get_pytest_command(test_path, test_name="", verbose=True, generate_reports=T
                     path_hash = hashlib.md5(report_dir_name.encode()).hexdigest()[:8]
                     report_dir_name = f"{report_dir_name[:92]}_{path_hash}"
         
-        report_dir = Path('tests/reports') / report_dir_name
+        report_dir = base_dir / 'reports' / report_dir_name
         report_dir.mkdir(parents=True, exist_ok=True)
         
         html_report = report_dir / 'report.html'
@@ -235,6 +246,10 @@ def get_pytest_command(test_path, test_name="", verbose=True, generate_reports=T
 
 def run_tests(test_path, test_name="", verbose=True, generate_reports=True):
     """Run tests and display results."""
+    # Get the python/ directory (parent of tests/)
+    script_dir = Path(__file__).parent.resolve()
+    python_dir = script_dir.parent
+    
     clear_screen()
     print(f"{Colors.HEADER}{Colors.BOLD}{'='*60}{Colors.ENDC}")
     print(f"{Colors.HEADER}{Colors.BOLD}Running Tests{Colors.ENDC}")
@@ -248,7 +263,7 @@ def run_tests(test_path, test_name="", verbose=True, generate_reports=True):
     print(f"{Colors.YELLOW}Command: {' '.join(cmd)}{Colors.ENDC}\n")
     
     try:
-        result = subprocess.run(cmd, cwd=Path('.').resolve())
+        result = subprocess.run(cmd, cwd=python_dir)
         print(f"\n{Colors.HEADER}{Colors.BOLD}{'='*60}{Colors.ENDC}")
         if result.returncode == 0:
             print(f"{Colors.GREEN}✓ Tests completed successfully!{Colors.ENDC}")
