@@ -5,6 +5,28 @@ All notable changes to the Hopx JavaScript/TypeScript SDK will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.5] - 2025-11-26
+
+### Fixed
+
+**Critical: HTTP Client Timeout Ignoring User-Specified Timeouts**
+- Fixed HTTP client using hardcoded 60-second timeout regardless of user-specified execution timeouts
+- **Root Cause**: `agentClient` was created with `timeout: 60000` (60s). User timeouts like `runCode({timeout: 300})` only went to API payload, not the HTTP request config
+- **Impact**: Operations taking longer than 60 seconds failed with HTTP timeout even when API timeout was set higher (e.g., 300 seconds)
+- **Resolution**: Pass HTTP timeout config to axios for all execution methods. HTTP timeout = API timeout + 30s buffer
+- **Affected Methods**:
+  - `sandbox.runCode()` - HTTP timeout now matches API timeout + 30s buffer
+  - `sandbox.runCodeAsync()` - HTTP timeout now matches API timeout + 30s buffer
+  - `sandbox.runCodeBackground()` - Uses 30s HTTP timeout (returns immediately)
+  - `sandbox.runIpython()` - HTTP timeout now matches API timeout + 30s buffer
+  - `sandbox.commands.run()` - HTTP timeout now matches API timeout + 30s buffer
+  - `sandbox.commands.runBackground()` - Uses 30s HTTP timeout (returns immediately)
+- **Files Modified**: `src/sandbox.ts`, `src/resources/commands.ts`
+
+**Buffer Strategy**: HTTP timeout is set to API timeout + 30 seconds to account for network latency and API processing overhead. Background operations use fixed 30s HTTP timeout since they return immediately.
+
+---
+
 ## [0.3.4] - 2025-11-25
 
 ### Added

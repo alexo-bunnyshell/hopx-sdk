@@ -920,7 +920,8 @@ class AsyncSandbox:
             "/execute",
             json=payload,
             operation="execute code",
-            context={"language": language}
+            context={"language": language},
+            timeout=timeout_seconds + 30  # Add buffer to HTTP timeout for network latency
         )
 
         # Parse rich outputs using shared utility

@@ -107,7 +107,7 @@ class Commands(_CommandsBase):
             json=payload,
             operation="run command",
             context={"command": command},
-            timeout=timeout + 5  # Add buffer to HTTP timeout
+            timeout=timeout + 30  # Add buffer to HTTP timeout for network latency
         )
         
         data = response.json()

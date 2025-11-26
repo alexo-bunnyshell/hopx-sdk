@@ -1428,7 +1428,7 @@ class Sandbox:
             json=payload,
             operation="execute code",
             context={"language": language},
-            timeout=timeout + 5  # Add buffer to HTTP timeout
+            timeout=timeout + 30  # Add buffer to HTTP timeout for network latency
         )
         
         data = response.json() if response.content else {}

@@ -5,6 +5,28 @@ All notable changes to the Hopx Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.5] - 2025-11-26
+
+### Changed
+
+**HTTP Timeout Buffer Increased**
+
+Increased HTTP timeout buffer from 5 seconds to 30 seconds to match JavaScript SDK:
+
+- `run_code()`: HTTP timeout = API timeout + 30s (was +5s)
+- `commands.run()`: HTTP timeout = API timeout + 30s (was +5s)
+- `desktop.wait_for()`: HTTP timeout = wait timeout + 30s (was +5s)
+- Background/async operations unchanged (return immediately, use fixed 10s)
+
+**Rationale**: The 30-second buffer provides more headroom for network latency and API processing overhead on slow connections.
+
+**Files Modified**:
+- `hopx_ai/sandbox.py` - Updated run_code() timeout buffer
+- `hopx_ai/async_sandbox.py` - Updated async run_code() timeout buffer
+- `hopx_ai/commands.py` - Updated commands.run() timeout buffer
+- `hopx_ai/_async_commands.py` - Updated async commands timeout buffer
+- `hopx_ai/desktop.py` - Updated wait_for() timeout buffer
+
 ## [0.3.4] - 2025-11-25
 
 ### Added

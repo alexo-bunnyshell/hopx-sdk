@@ -1111,7 +1111,7 @@ class Desktop:
             "/desktop/x11/wait_for",
             json={"text": text, "timeout": timeout},
             operation="wait for element",
-            timeout=timeout + 5
+            timeout=timeout + 30
         )
         
         data = response.json()

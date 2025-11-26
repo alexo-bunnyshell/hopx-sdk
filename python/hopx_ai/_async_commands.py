@@ -58,7 +58,8 @@ class AsyncCommands(_CommandsBase):
             "/commands/run",
             json=payload,
             operation="run command",
-            context={"command": command}
+            context={"command": command},
+            timeout=timeout_seconds + 30  # Add buffer to HTTP timeout for network latency
         )
 
         return ExecutionResult(

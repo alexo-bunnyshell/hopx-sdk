@@ -749,6 +749,10 @@ export class Sandbox {
 
     await this.ensureAgentClient();
 
+    const apiTimeout = options?.timeout ?? 120;
+    // HTTP timeout = API timeout + 30s buffer for network/processing overhead
+    const httpTimeout = (apiTimeout + 30) * 1000;
+
     const response = await this.agentClient!.post<ExecuteResponse & {
       png?: string;
       html?: string;
@@ -759,10 +763,11 @@ export class Sandbox {
       {
         code,
         language: options?.language ?? 'python',
-        timeout: options?.timeout ?? 120,
+        timeout: apiTimeout,
         workdir: options?.workingDir ?? '/workspace',
         env: options?.env,
-      }
+      },
+      { timeout: httpTimeout }
     );
 
     // Parse rich outputs from Jupyter (agent returns: .png, .html, .json, .result)
@@ -805,39 +810,63 @@ export class Sandbox {
   async runCodeAsync(code: string, options: AsyncExecutionOptions): Promise<AsyncExecuteResponse> {
     await this.ensureAgentClient();
 
-    return this.agentClient!.post<AsyncExecuteResponse>('/execute/async', {
-      code,
-      language: options.language ?? 'python',
-      timeout: options.timeout ?? 1800,
-      workdir: options.workingDir ?? '/workspace',
-      env: options.env,
-      callback_url: options.callbackUrl,
-      callback_headers: options.callbackHeaders,
-      callback_signature_secret: options.callbackSignatureSecret,
-    });
+    const apiTimeout = options.timeout ?? 1800;
+    // HTTP timeout = API timeout + 30s buffer for network/processing overhead
+    const httpTimeout = (apiTimeout + 30) * 1000;
+
+    return this.agentClient!.post<AsyncExecuteResponse>(
+      '/execute/async',
+      {
+        code,
+        language: options.language ?? 'python',
+        timeout: apiTimeout,
+        workdir: options.workingDir ?? '/workspace',
+        env: options.env,
+        callback_url: options.callbackUrl,
+        callback_headers: options.callbackHeaders,
+        callback_signature_secret: options.callbackSignatureSecret,
+      },
+      { timeout: httpTimeout }
+    );
   }
 
   async runCodeBackground(code: string, options?: BackgroundExecutionOptions): Promise<BackgroundExecuteResponse> {
     await this.ensureAgentClient();
 
-    return this.agentClient!.post<BackgroundExecuteResponse>('/execute/background', {
-      code,
-      language: options?.language ?? 'python',
-      timeout: options?.timeout ?? 300,
-      workdir: options?.workingDir ?? '/workspace',
-      env: options?.env,
-      name: options?.name,
-    });
+    const apiTimeout = options?.timeout ?? 300;
+    // Background operations return immediately - 30s HTTP timeout is sufficient
+    const httpTimeout = 30000;
+
+    return this.agentClient!.post<BackgroundExecuteResponse>(
+      '/execute/background',
+      {
+        code,
+        language: options?.language ?? 'python',
+        timeout: apiTimeout,
+        workdir: options?.workingDir ?? '/workspace',
+        env: options?.env,
+        name: options?.name,
+      },
+      { timeout: httpTimeout }
+    );
   }
 
   async runIpython(code: string, options?: Omit<CodeExecutionOptions, 'language'>): Promise<ExecutionResult> {
     await this.ensureAgentClient();
 
-    const response = await this.agentClient!.post<ExecuteResponse>('/execute/ipython', {
-      code,
-      timeout: options?.timeout ?? 60,
-      env: options?.env,
-    });
+    const apiTimeout = options?.timeout ?? 60;
+    // HTTP timeout = API timeout + 30s buffer for network/processing overhead
+    const httpTimeout = (apiTimeout + 30) * 1000;
+
+    const response = await this.agentClient!.post<ExecuteResponse>(
+      '/execute/ipython',
+      {
+        code,
+        timeout: apiTimeout,
+        env: options?.env,
+      },
+      { timeout: httpTimeout }
+    );
 
     return new ExecutionResultImpl(response);
   }
