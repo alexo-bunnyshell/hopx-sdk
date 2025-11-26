@@ -40,7 +40,9 @@ def get_test_classes_and_methods(file_path):
             if isinstance(node, ast.ClassDef) and node.name.startswith('Test'):
                 methods = []
                 for item in node.body:
-                    if isinstance(item, ast.FunctionDef) and item.name.startswith('test_'):
+                    # Check for both regular and async test methods
+                    if (isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) 
+                        and item.name.startswith('test_')):
                         methods.append(item.name)
                 if methods:
                     classes.append({'name': node.name, 'methods': sorted(methods)})
@@ -190,6 +192,51 @@ def display_menu(items, title, breadcrumb="", show_back=True, show_run_all=False
             print(f"\n{Colors.YELLOW}Exiting...{Colors.ENDC}")
             sys.exit(0)
 
+def update_manifest(script_dir, python_dir):
+    """
+    Update the test reports manifest after a test run.
+    
+    Args:
+        script_dir: Path to the tests directory
+        python_dir: Path to the python directory (for running the script)
+    
+    Returns:
+        bool: True if manifest was updated successfully, False otherwise
+    """
+    try:
+        manifest_script = script_dir / 'reports' / 'generate_manifest.py'
+        if not manifest_script.exists():
+            print(f"{Colors.YELLOW}⚠ Manifest script not found at {manifest_script}{Colors.ENDC}")
+            return False
+        
+        print(f"{Colors.CYAN}Updating test reports manifest...{Colors.ENDC}")
+        manifest_result = subprocess.run(
+            [sys.executable, str(manifest_script)], 
+            cwd=python_dir, 
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        
+        if manifest_result.returncode == 0:
+            # Show success message from the script if available
+            if manifest_result.stdout.strip():
+                print(f"{Colors.GREEN}{manifest_result.stdout.strip()}{Colors.ENDC}")
+            else:
+                print(f"{Colors.GREEN}✓ Manifest updated successfully{Colors.ENDC}")
+            return True
+        else:
+            # Show error if manifest generation failed
+            error_msg = manifest_result.stderr.strip() or manifest_result.stdout.strip()
+            if error_msg:
+                print(f"{Colors.YELLOW}⚠ Manifest update warning: {error_msg}{Colors.ENDC}")
+            else:
+                print(f"{Colors.YELLOW}⚠ Manifest update completed with warnings{Colors.ENDC}")
+            return False
+    except Exception as e:
+        print(f"{Colors.YELLOW}⚠ Failed to update manifest: {str(e)}{Colors.ENDC}")
+        return False
+
 def get_pytest_command(test_path, test_name="", verbose=True, generate_reports=True):
     """Build pytest command with options."""
     # Get the tests directory (where this script is located)
@@ -271,22 +318,21 @@ def run_tests(test_path, test_name="", verbose=True, generate_reports=True):
             print(f"{Colors.RED}✗ Tests failed (exit code: {result.returncode}){Colors.ENDC}")
         print(f"{Colors.HEADER}{Colors.BOLD}{'='*60}{Colors.ENDC}\n")
         
-        # Auto-generate manifest.json for index.html
+        # Auto-generate manifest.json for index.html after test run
         if generate_reports:
-            try:
-                manifest_script = script_dir / 'reports' / 'generate_manifest.py'
-                if manifest_script.exists():
-                    subprocess.run([sys.executable, str(manifest_script)], 
-                                 cwd=python_dir, 
-                                 capture_output=True,
-                                 check=False)
-            except Exception:
-                pass  # Silently fail if manifest generation doesn't work
+            update_manifest(script_dir, python_dir)
+            print()  # Add blank line after manifest update message
         
         input(f"{Colors.YELLOW}Press Enter to continue...{Colors.ENDC}")
         return result.returncode == 0
     except KeyboardInterrupt:
         print(f"\n{Colors.YELLOW}Test execution interrupted.{Colors.ENDC}")
+        
+        # Still update manifest if reports were being generated
+        if generate_reports:
+            update_manifest(script_dir, python_dir)
+            print()
+        
         input(f"{Colors.YELLOW}Press Enter to continue...{Colors.ENDC}")
         return False
 

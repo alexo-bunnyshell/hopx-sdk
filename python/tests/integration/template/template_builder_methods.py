@@ -98,15 +98,80 @@ class TestTemplateBuilderMethods:
         
         Validates that the from_node_image() builder method correctly sets
         the base image for the template. Verifies that the getter method
-        returns a non-None value containing the expected image identifier.
+        returns the exact expected image identifier.
         
         This is a unit-style test that doesn't require API calls, only
         validating the builder pattern configuration.
         """
         template = Template().from_node_image("20")
         
-        assert template.get_from_image() is not None
-        assert "node" in template.get_from_image().lower() or "20" in template.get_from_image()
+        from_image = template.get_from_image()
+        assert from_image is not None
+        # Verify exact expected format: ubuntu/node:{version}-22.04_edge
+        assert from_image == "ubuntu/node:20-22.04_edge"
+        # Also verify it contains both "node" and the version
+        assert "node" in from_image.lower()
+        assert "20" in from_image
+
+    @pytest.mark.asyncio
+    async def test_from_node_image_integration(self, api_key, template_name):
+        """
+        Integration test: Verify that from_node_image() actually works end-to-end.
+        
+        This test builds a real template using from_node_image() and verifies:
+        1. The template builds successfully
+        2. A sandbox can be created from the template
+        3. Node.js is actually available in the sandbox
+        
+        This ensures the method doesn't just set a string value, but that the
+        configured image actually works when building templates.
+        """
+        # Create a template with Node.js base image
+        template = (
+            Template()
+            .from_node_image("20")
+            .run_cmd("node --version")  # Verify Node.js is available
+        )
+        
+        # Build the template (this can take 1+ minutes)
+        with timed_operation("Template.build", warn_threshold=60.0, template_name=template_name):
+            result = await Template.build(
+                template,
+                BuildOptions(
+                    name=template_name,
+                    api_key=api_key,
+                    base_url=BASE_URL,
+                    cpu=1,
+                    memory=1024,
+                    disk_gb=5,
+                ),
+            )
+        
+        assert result.template_id is not None
+        
+        # Verify we can create a sandbox from this template and Node.js works
+        async with AsyncSandbox.from_template(
+            template_id=result.template_id,
+            api_key=api_key,
+            base_url=BASE_URL,
+        ) as sandbox:
+            # Execute code to verify Node.js is available
+            exec_result = await sandbox.execute_code(
+                code="console.log('Node.js version:', process.version)",
+                language="javascript"
+            )
+            assert exec_result.exit_code == 0
+            assert "v20" in exec_result.stdout  # Should contain Node.js 20 version
+        
+        # Cleanup
+        try:
+            await AsyncSandbox.delete_template(
+                template_id=result.template_id,
+                api_key=api_key,
+                base_url=BASE_URL,
+            )
+        except Exception:
+            pass
 
     def test_template_getter_methods(self):
         """
