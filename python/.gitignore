@@ -10,8 +10,6 @@
 .env
 
 # test report specific ignore list
-reports/*
-!reports/generate_manifest.py
-!reports/index.html
-!reports/manifest.json
-!reports/manifest.js
+tests/reports/*
+!tests/reports/generate_manifest.py
+!tests/reports/index.html
