@@ -63,15 +63,7 @@ def generate_manifest():
     with open(manifest_path, 'w', encoding='utf-8') as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
     
-    # Also write manifest.js for direct embedding (works with file:// protocol)
-    manifest_js_path = reports_dir / 'manifest.js'
-    with open(manifest_js_path, 'w', encoding='utf-8') as f:
-        f.write('// Auto-generated manifest data\n')
-        f.write('window.TEST_REPORTS_MANIFEST = ')
-        json.dump(manifest, f, indent=2, ensure_ascii=False)
-        f.write(';\n')
-    
-    print(f"✓ Generated manifest.json and manifest.js with {len(reports)} reports")
+    print(f"✓ Generated manifest.json with {len(reports)} reports")
     return manifest
 
 if __name__ == '__main__':

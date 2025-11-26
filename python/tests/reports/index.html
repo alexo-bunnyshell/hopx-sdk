@@ -420,8 +420,6 @@
     </div>
     <button class="refresh-btn" onclick="scanReports()" title="Refresh reports list">🔄 Refresh</button>
 
-    <!-- Load manifest data (works with file:// protocol) -->
-    <script src="./manifest.js"></script>
     <script>
         // Function to get all directories and check for report.html files
         async function scanReports() {
@@ -489,17 +487,7 @@
 
         // Discover reports by reading manifest.json
         async function discoverReports() {
-            // Method 1: Check if manifest.js was loaded (works with file:// protocol)
-            if (typeof window.TEST_REPORTS_MANIFEST !== 'undefined') {
-                const manifest = window.TEST_REPORTS_MANIFEST;
-                console.log('Loaded manifest from manifest.js:', manifest);
-                if (manifest.reports && manifest.reports.length > 0) {
-                    console.log(`Found ${manifest.reports.length} reports`);
-                    return manifest.reports;
-                }
-            }
-            
-            // Method 2: Try multiple methods to load manifest.json (works with both file:// and http://)
+            // Try multiple methods to load manifest.json (works with both file:// and http://)
             const methods = [
                 // Fetch API (works with HTTP/HTTPS)
                 async () => {
