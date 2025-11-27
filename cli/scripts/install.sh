@@ -812,23 +812,23 @@ print_quick_start() {
 
     printf "${BOLD}Quick Start:${NC}\n" >&2
     printf "\n" >&2
-    printf "  ${CYAN}1.${NC} Set your API key:\n" >&2
-    printf "     ${DIM}export HOPX_API_KEY=\"hopx_live_...\"${NC}\n" >&2
+    printf "  ${CYAN}1.${NC} Run setup wizard:\n" >&2
+    printf "     ${DIM}hopx init${NC}\n" >&2
     printf "\n" >&2
-    printf "  ${CYAN}2.${NC} Run your first command:\n" >&2
+    printf "  ${CYAN}2.${NC} Run your first code:\n" >&2
     printf "     ${DIM}hopx run \"print('Hello from Hopx!')\"${NC}\n" >&2
     printf "\n" >&2
     printf "  ${CYAN}3.${NC} Explore commands:\n" >&2
     printf "     ${DIM}hopx --help${NC}\n" >&2
     printf "\n" >&2
     printf "${BOLD}Common Commands:${NC}\n" >&2
+    printf "  hopx init                First-run setup wizard\n" >&2
+    printf "  hopx auth login          Authenticate with browser\n" >&2
     printf "  hopx run \"code\"          Execute code in sandbox\n" >&2
     printf "  hopx sandbox list        List active sandboxes\n" >&2
-    printf "  hopx template list       List available templates\n" >&2
-    printf "  hopx self-update         Update to latest version\n" >&2
     printf "\n" >&2
     printf "${BOLD}Resources:${NC}\n" >&2
-    printf "  Docs:    ${CYAN}https://docs.hopx.ai/cli${NC}\n" >&2
+    printf "  Docs:    ${CYAN}https://docs.hopx.dev${NC}\n" >&2
     printf "  Discord: ${CYAN}https://discord.gg/hopx${NC}\n" >&2
     printf "  Support: ${CYAN}support@hopx.ai${NC}\n" >&2
     printf "\n" >&2
