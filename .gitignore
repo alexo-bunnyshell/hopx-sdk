@@ -48,8 +48,11 @@ CLAUDE.md
 .claude/
 
 # avoid accidental garbage collection
-!README.md
 *.md
+!README.md
+!cli/*.md
+!cli/scripts/*.md
+!cli/tests/*.md
 test*.py
 check*.py
 *.txt
