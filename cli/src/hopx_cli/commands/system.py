@@ -13,7 +13,6 @@ from ..core import CLIContext
 app = typer.Typer(
     help="System and health commands",
     no_args_is_help=True,
-    context_settings={"allow_interspersed_args": True},
 )
 console = Console()
 

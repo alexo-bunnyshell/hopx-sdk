@@ -21,7 +21,7 @@ from ..core.context import CLIContext
 
 app = typer.Typer(
     help="CLI configuration management",
-    context_settings={"allow_interspersed_args": True},
+    no_args_is_help=True,
 )
 console = Console()
 
@@ -352,7 +352,10 @@ def config_path(ctx: typer.Context) -> None:
 
 
 # Profile management subgroup
-profiles_app = typer.Typer(help="Manage configuration profiles")
+profiles_app = typer.Typer(
+    help="Manage configuration profiles",
+    no_args_is_help=True,
+)
 app.add_typer(profiles_app, name="profiles")
 
 

@@ -18,7 +18,6 @@ from ..output import Spinner
 app = typer.Typer(
     help="Manage user profile",
     no_args_is_help=True,
-    context_settings={"allow_interspersed_args": True},
 )
 console = Console()
 

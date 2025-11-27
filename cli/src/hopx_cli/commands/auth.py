@@ -4,6 +4,8 @@ Handles OAuth login, API key management, and authentication status.
 """
 
 import re
+import secrets
+import socket
 import time
 from datetime import UTC, datetime
 from typing import Literal, cast
@@ -12,7 +14,7 @@ import httpx
 import typer
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Confirm
+from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from hopx_cli.auth.api_keys import APIKeyManager
@@ -24,7 +26,7 @@ from hopx_cli.output import Spinner
 
 app = typer.Typer(
     help="Authentication management",
-    context_settings={"allow_interspersed_args": True},
+    no_args_is_help=True,
 )
 console = Console()
 
@@ -33,6 +35,29 @@ def _get_profile(ctx: typer.Context) -> str:
     """Get profile from CLI context."""
     cli_ctx: CLIContext = ctx.obj
     return cli_ctx.config.profile if cli_ctx else "default"
+
+
+def _get_machine_name() -> str:
+    """Get a unique name for the API key based on machine hostname.
+
+    Appends a random suffix to ensure uniqueness.
+    """
+    try:
+        hostname = socket.gethostname()
+        base_name = hostname.split(".")[0][:14]
+    except Exception:
+        base_name = "cli"
+    suffix = secrets.token_hex(3)
+    return f"{base_name}-{suffix}"
+
+
+def _mask_api_key(api_key: str) -> str:
+    """Mask API key for display, showing only prefix."""
+    if not api_key:
+        return "[dim]not set[/dim]"
+    if len(api_key) <= 20:
+        return api_key[:4] + "..." if len(api_key) > 4 else api_key
+    return api_key[:20] + "..."
 
 
 # API key validation regex: hopx_live_{12 chars}.{base64url}
@@ -102,14 +127,94 @@ def login(
             expires_str = expires_dt.strftime("%Y-%m-%d %H:%M:%S UTC")
             console.print(f"Token expires: [dim]{expires_str}[/dim]")
 
-        # Next steps
-        console.print("\n[bold]Next steps:[/bold]")
-        console.print('  1. Create an API key: [cyan]hopx auth keys create --name "my-key"[/cyan]')
-        console.print("  2. The key will be stored automatically")
-        console.print("  3. Then run: [cyan]hopx sandbox list[/cyan]")
-        console.print(
-            "\n[dim]Why? OAuth proves your identity. API keys authorize sandbox operations.[/dim]"
-        )
+        # === API KEY SETUP (works for both browser and no-browser modes) ===
+        oauth_token = token_data.get("access_token")
+        existing_api_key = credentials.get_api_key()
+
+        console.print("\n[bold]API Key Setup[/bold]")
+        console.print("[dim]API keys authorize sandbox operations.[/dim]")
+
+        if existing_api_key:
+            # Already have a key stored locally
+            console.print(f"Found existing API key: {_mask_api_key(existing_api_key)}")
+            choice = Prompt.ask(
+                "What would you like to do?",
+                choices=["use", "new", "provide", "skip"],
+                default="use",
+            )
+        else:
+            # No local key - offer to create one
+            console.print("[dim]No API key found locally.[/dim]")
+            choice = Prompt.ask(
+                "What would you like to do?",
+                choices=["create", "provide", "skip"],
+                default="create",
+            )
+
+        # Handle user's choice
+        if choice == "use":
+            # Use existing key - nothing to do (existing_api_key is guaranteed non-None here)
+            console.print(
+                f"[green]✓[/green] Using existing API key: {_mask_api_key(existing_api_key or '')}"
+            )
+
+        elif choice in ("create", "new"):
+            # Create a new API key
+            if not oauth_token:
+                console.print("[red]✗[/red] OAuth token not available for key creation")
+                console.print('[dim]Try: hopx auth keys create --name "my-key"[/dim]')
+            else:
+                key_name = _get_machine_name()
+                console.print(f"Creating API key '{key_name}'...")
+
+                try:
+                    with Spinner("Creating API key...") as spinner:
+                        with APIKeyManager(oauth_token) as manager:
+                            result = manager.create_key(key_name, expires_in="never")
+                        spinner.stop()
+
+                    key_value = result.get("full_key")
+                    if key_value:
+                        credentials.store_api_key(key_value)
+                        console.print("[green]✓[/green] API key created and stored")
+                        console.print(f"[dim]Key: {_mask_api_key(key_value)}[/dim]")
+                    else:
+                        console.print("[red]✗[/red] Failed to create API key")
+                        console.print('[dim]Try: hopx auth keys create --name "my-key"[/dim]')
+
+                except Exception as e:
+                    console.print(f"[red]✗[/red] Failed to create API key: {e}")
+                    console.print('[dim]Try: hopx auth keys create --name "my-key"[/dim]')
+
+        elif choice == "provide":
+            # User provides their own key
+            console.print("\n[dim]Enter your API key (format: hopx_live_xxx.yyy)[/dim]")
+            user_key = Prompt.ask("API Key")
+
+            if user_key and API_KEY_PATTERN.match(user_key):
+                credentials.store_api_key(user_key)
+                console.print(f"[green]✓[/green] API key stored: {_mask_api_key(user_key)}")
+            elif user_key:
+                console.print("[red]✗[/red] Invalid API key format")
+                console.print("[dim]Expected format: hopx_live_xxxxxxxxxxxx.secret[/dim]")
+                console.print(
+                    "[dim]Set HOPX_API_KEY environment variable or run hopx auth keys create[/dim]"
+                )
+            else:
+                console.print("[yellow]⚠[/yellow] No key provided")
+                console.print(
+                    "[dim]Set HOPX_API_KEY environment variable or run hopx auth keys create[/dim]"
+                )
+
+        elif choice == "skip":
+            # Skip API key setup
+            console.print("[yellow]⚠[/yellow] Skipped API key setup")
+            console.print(
+                '[dim]Set HOPX_API_KEY env var or run: hopx auth keys create --name "my-key"[/dim]'
+            )
+
+        # Final ready message
+        console.print("\n[bold]Ready![/bold] Try: [cyan]hopx sandbox list[/cyan]")
 
     except TimeoutError:
         console.print("\n[red]Error:[/red] Authentication timed out")
@@ -402,7 +507,7 @@ def validate(ctx: typer.Context) -> None:
 # API Key management subgroup
 keys_app = typer.Typer(
     help="Manage API keys (requires OAuth login)",
-    context_settings={"allow_interspersed_args": True},
+    no_args_is_help=True,
 )
 app.add_typer(keys_app, name="keys")
 

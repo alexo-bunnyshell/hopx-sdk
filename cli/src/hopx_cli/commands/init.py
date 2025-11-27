@@ -20,7 +20,6 @@ from hopx_cli.output import Spinner
 
 app = typer.Typer(
     help="First-run setup wizard",
-    context_settings={"allow_interspersed_args": True},
 )
 console = Console()
 

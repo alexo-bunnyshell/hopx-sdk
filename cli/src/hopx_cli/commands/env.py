@@ -16,7 +16,6 @@ from ..output import Spinner, format_output
 app = typer.Typer(
     help="Manage sandbox environment variables",
     no_args_is_help=True,
-    context_settings={"allow_interspersed_args": True},
 )
 console = Console()
 

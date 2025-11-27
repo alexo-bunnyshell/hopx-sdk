@@ -17,7 +17,6 @@ from ..output import Spinner, format_output
 app = typer.Typer(
     help="Interactive terminal sessions",
     no_args_is_help=True,
-    context_settings={"allow_interspersed_args": True},
 )
 console = Console()
 

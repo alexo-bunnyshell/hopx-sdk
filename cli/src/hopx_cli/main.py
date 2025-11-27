@@ -1,6 +1,10 @@
 """Main Typer application and command routing for Hopx CLI."""
 
+import sys
+
 import typer
+from rich.console import Console
+from rich.table import Table
 
 from hopx_cli import __version__
 from hopx_cli.core import CLIConfig, CLIContext, OutputFormat
@@ -13,27 +17,77 @@ def version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-app = typer.Typer(
+def _print_epilog() -> None:
+    """Print the help epilog with proper formatting using Rich."""
+    console = Console()
+
+    # Aliases table
+    aliases_table = Table(
+        show_header=False,
+        box=None,
+        padding=(0, 2, 0, 0),
+        collapse_padding=True,
+    )
+    aliases_table.add_column("alias", style="cyan")
+    aliases_table.add_column("arrow", style="dim")
+    aliases_table.add_column("command", style="green")
+    aliases_table.add_column("description", style="dim")
+
+    aliases_table.add_row("sb", "→", "sandbox", "Manage sandboxes")
+    aliases_table.add_row("tpl", "→", "template", "Manage templates")
+    aliases_table.add_row("f", "→", "files", "File operations")
+    aliases_table.add_row("term", "→", "terminal", "Interactive terminals")
+
+    console.print()
+    console.print("[bold]Aliases:[/bold]")
+    console.print(aliases_table)
+
+    # Quick Start table
+    quick_start_table = Table(
+        show_header=False,
+        box=None,
+        padding=(0, 2, 0, 0),
+        collapse_padding=True,
+    )
+    quick_start_table.add_column("command", style="cyan")
+    quick_start_table.add_column("description", style="dim")
+
+    quick_start_table.add_row("hopx auth login", "Authenticate with browser")
+    quick_start_table.add_row("hopx auth keys create", "Create and store API key")
+    quick_start_table.add_row("hopx sandbox create", "Create a new sandbox")
+    quick_start_table.add_row('hopx run "print(1)"', "Run code in sandbox")
+
+    console.print()
+    console.print("[bold]Quick Start:[/bold]")
+    console.print(quick_start_table)
+
+    console.print()
+    console.print("[dim]Docs: https://docs.hopx.dev | Support: support@hopx.ai[/dim]")
+
+
+class HopxTyper(typer.Typer):
+    """Custom Typer class that adds epilog after help output."""
+
+    def __call__(self, *args: object, **kwargs: object) -> None:
+        """Override to add epilog when --help is used."""
+        # Check if --help is in sys.argv and we're at the root command
+        if "--help" in sys.argv and len([a for a in sys.argv[1:] if not a.startswith("-")]) == 0:
+            # This is `hopx --help`, not `hopx <subcommand> --help`
+            try:
+                super().__call__(*args, **kwargs)
+            except SystemExit as e:
+                _print_epilog()
+                raise e
+        else:
+            super().__call__(*args, **kwargs)
+
+
+app = HopxTyper(
     name="hopx",
     help="Hopx CLI - Manage cloud sandboxes from the command line",
     no_args_is_help=True,
     rich_markup_mode="rich",
     add_completion=True,
-    epilog="""
-[bold]Aliases:[/bold]
-  sb    [dim]→[/dim] sandbox     [dim]Manage sandboxes[/dim]
-  tpl   [dim]→[/dim] template    [dim]Manage templates[/dim]
-  f     [dim]→[/dim] files       [dim]File operations[/dim]
-  term  [dim]→[/dim] terminal    [dim]Interactive terminals[/dim]
-
-[bold]Quick Start:[/bold]
-  hopx auth login        [dim]Authenticate with browser[/dim]
-  hopx auth keys create  [dim]Create and store API key[/dim]
-  hopx sandbox create    [dim]Create a new sandbox[/dim]
-  hopx run "print(1)"    [dim]Run code in sandbox[/dim]
-
-[dim]Docs: https://docs.hopx.dev | Support: support@hopx.ai[/dim]
-""",
 )
 
 

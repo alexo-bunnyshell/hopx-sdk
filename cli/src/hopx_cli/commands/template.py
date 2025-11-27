@@ -27,7 +27,6 @@ from ..output import (
 app = typer.Typer(
     help="Manage templates",
     no_args_is_help=True,
-    context_settings={"allow_interspersed_args": True},
 )
 console = Console()
 

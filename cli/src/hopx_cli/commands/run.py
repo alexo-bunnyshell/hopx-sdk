@@ -21,7 +21,6 @@ from ..core import CLIContext
 app = typer.Typer(
     help="Execute code in sandboxes",
     no_args_is_help=True,
-    context_settings={"allow_interspersed_args": True},
 )
 console = Console()
 console_stderr = Console(stderr=True)

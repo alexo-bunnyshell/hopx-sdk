@@ -5,6 +5,24 @@ All notable changes to the Hopx CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2025-11-28
+
+### Fixed
+
+- Subcommand help and options now work correctly for all nested commands
+  - `hopx auth keys --help` now shows keys help instead of auth help
+  - `hopx auth keys create --name "test"` now correctly parses the `--name` option
+  - `hopx config profiles --help` shows profiles help correctly
+  - Fixed all 14 command modules by removing `allow_interspersed_args` context setting
+
+### Added
+
+- Login flow now includes interactive API key setup
+  - After OAuth login, prompts to create, provide, or skip API key setup
+  - Detects existing local API keys and offers to use, replace, or skip
+  - Works in both browser and headless (`--no-browser`) modes
+  - Auto-generates unique key names based on hostname
+
 ## [0.1.1] - 2025-11-28
 
 ### Fixed
