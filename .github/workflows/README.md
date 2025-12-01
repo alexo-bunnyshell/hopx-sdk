@@ -9,8 +9,8 @@ This directory contains GitHub Actions workflows for the Hopx Python SDK.
 Runs the complete test suite across multiple Python versions (3.8, 3.9, 3.10, 3.11, 3.12).
 
 **Triggers:**
-- Pull requests to `main`, `master`, or `develop`
-- Pushes to `main`, `master`, or `develop`
+- Pull requests to `main` or `test`
+- Pushes to `main` or `test`
 - Manual workflow dispatch (with optional feature selection)
 - Only runs when Python files or workflow files change
 
@@ -28,7 +28,7 @@ Runs the complete test suite across multiple Python versions (3.8, 3.9, 3.10, 3.
 Runs a quick test suite on Python 3.11 for faster PR feedback.
 
 **Triggers:**
-- Pull requests to `main`, `master`, or `develop`
+- Pull requests to `main` or `test`
 - Manual workflow dispatch (with optional feature selection)
 - Only runs when Python files or workflow files change
 
