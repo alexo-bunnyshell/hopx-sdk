@@ -4,7 +4,7 @@ This directory contains GitHub Actions workflows for the Hopx Python SDK.
 
 ## Workflows
 
-### `test.yml` - Full Test Suite
+### `python-tests.yml` - Full Test Suite
 
 Runs the complete test suite across multiple Python versions (3.8, 3.9, 3.10, 3.11, 3.12).
 
@@ -23,7 +23,7 @@ Runs the complete test suite across multiple Python versions (3.8, 3.9, 3.10, 3.
 - Uploads coverage to Codecov (if configured)
 - Creates GitHub issues for test failures
 
-### `test-quick.yml` - Quick PR Tests
+### `python-tests-quick.yml` - Quick PR Tests
 
 Runs a quick test suite on Python 3.11 for faster PR feedback.
 
@@ -226,7 +226,7 @@ SOURCE_TO_TESTS = {
 
 #### Changing Python Versions
 
-Edit the `matrix.python-version` in `test.yml`:
+Edit the `matrix.python-version` in `python-tests.yml`:
 
 ```yaml
 matrix:

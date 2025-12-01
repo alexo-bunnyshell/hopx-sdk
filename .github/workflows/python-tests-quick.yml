@@ -1,4 +1,4 @@
-name: Quick Test (PR)
+name: Python SDK Quick Test (PR)
 
 on:
   pull_request:
@@ -7,7 +7,7 @@ on:
       - test
     paths:
       - 'python/**'
-      - '.github/workflows/test*.yml'
+      - '.github/workflows/python-tests*.yml'
       - '.github/test_mapper.py'
   workflow_dispatch:
     inputs:

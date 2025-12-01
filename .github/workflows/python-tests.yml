@@ -1,4 +1,4 @@
-name: Test Suite
+name: Python SDK Test Suite
 
 # Configuration Options:
 # 
@@ -36,7 +36,7 @@ on:
       - test
     paths:
       - 'python/**'
-      - '.github/workflows/test.yml'
+      - '.github/workflows/python-tests.yml'
       - '.github/test_mapper.py'
   push:
     branches:
@@ -44,7 +44,7 @@ on:
       - test
     paths:
       - 'python/**'
-      - '.github/workflows/test.yml'
+      - '.github/workflows/python-tests.yml'
       - '.github/test_mapper.py'
   workflow_dispatch:
     inputs:
@@ -187,10 +187,12 @@ jobs:
         run: |
           TEST_TYPE="${TEST_TYPE:-all}"
           TEST_SCOPE="${TEST_SCOPE:-}"
-          # Handle manual workflow dispatch or explicit scope from directives
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "$TEST_SCOPE" ]; then
+          
+          # Handle explicit scope from directives (for all event types: push, PR, workflow_dispatch)
+          if [ -n "$TEST_SCOPE" ]; then
             SCOPE="$TEST_SCOPE"
             if [ "$SCOPE" == "all" ]; then
+              # [test: all] - run all tests, don't use file-based detection
               echo "" > changed_files.txt
             else
               # Convert scope to test path (e.g., "desktop" -> "tests/integration/desktop/")
@@ -228,13 +230,13 @@ jobs:
                 esac
               fi
             fi
-          # Handle PR
+          # Handle PR (only if no scope directive)
           elif [ "${{ github.event_name }}" == "pull_request" ]; then
             BASE="${{ github.event.pull_request.base.sha }}"
             HEAD="${{ github.event.pull_request.head.sha }}"
             git diff --name-only $BASE...$HEAD > changed_files.txt
-          # Handle push (may contain multiple commits)
-          else
+          # Handle push (only if no scope directive)
+          elif [ "${{ github.event_name }}" == "push" ]; then
             if [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
               git diff --name-only ${{ github.event.before }}...${{ github.event.after }} > changed_files.txt
             else
@@ -251,8 +253,13 @@ jobs:
           # Get test_type and scope from previous steps (already in GITHUB_ENV)
           TEST_TYPE="${TEST_TYPE:-all}"
           TEST_SCOPE="${TEST_SCOPE:-}"
-          # Check if scope is directly specified (from workflow_dispatch, commit message, or PR description)
-          if [ -n "$TEST_SCOPE" ] && [ "$TEST_SCOPE" != "all" ]; then
+          
+          # Handle explicit "all" scope first
+          if [ -n "$TEST_SCOPE" ] && [ "$TEST_SCOPE" == "all" ]; then
+            # [test: all] - run all tests
+            TEST_PATHS="tests/integration/ tests/e2e/"
+          # Check if scope is directly specified (but not "all")
+          elif [ -n "$TEST_SCOPE" ] && [ "$TEST_SCOPE" != "all" ]; then
             # Scope is explicitly set - use it directly
             if [[ "$TEST_SCOPE" == tests/* ]]; then
               TEST_PATHS="$TEST_SCOPE"
@@ -271,8 +278,8 @@ jobs:
             TEST_PATHS="tests/integration/ tests/e2e/"
           else
             # Use test mapper to determine test paths from changed files
-          python3 .github/test_mapper.py changed_files.txt -v > mapper_output.txt || true
-          TEST_PATHS=$(grep "^test_paths=" mapper_output.txt | cut -d'=' -f2- || echo "")
+            python3 .github/test_mapper.py changed_files.txt -v > mapper_output.txt || true
+            TEST_PATHS=$(grep "^test_paths=" mapper_output.txt | cut -d'=' -f2- || echo "")
           fi
           
           # Filter by test type if specified
