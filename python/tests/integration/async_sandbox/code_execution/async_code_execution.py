@@ -21,9 +21,9 @@ class TestAsyncCodeExecution:
     """Test async code execution."""
 
     @pytest.mark.asyncio
-    async def test_run_simple_code(self, async_async_sandbox):
+    async def test_run_simple_code(self, async_sandbox):
         """Test running simple Python code."""
-        result = await async_async_sandbox.run_code("print('Hello, World!')")
+        result = await async_sandbox.run_code("print('Hello, World!')")
 
         assert result.success is True
         assert "Hello, World!" in result.stdout

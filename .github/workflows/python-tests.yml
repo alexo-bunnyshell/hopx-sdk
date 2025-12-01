@@ -67,6 +67,13 @@ jobs:
   determine-tests:
     name: Determine Test Scope
     runs-on: ubuntu-latest
+    # Skip push events for PR branches to avoid duplicate runs
+    # Only run push events for direct pushes to main/test (not from PR branches)
+    # PR branches will be handled by pull_request event
+    if: |
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'))
     outputs:
       test_paths: ${{ steps.map-tests.outputs.test_paths }}
       run_integration: ${{ steps.map-tests.outputs.run_integration }}
