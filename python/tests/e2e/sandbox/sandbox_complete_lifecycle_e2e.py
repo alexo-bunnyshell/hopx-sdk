@@ -14,6 +14,9 @@ import os
 import pytest
 from hopx_ai import Sandbox
 
+# Import cleanup registration functions
+from tests.conftest import _register_sandbox
+
 BASE_URL = os.getenv("HOPX_TEST_BASE_URL", "https://api-eu.hopx.dev")
 TEST_TEMPLATE = os.getenv("HOPX_TEST_TEMPLATE", "code-interpreter")
 
@@ -79,6 +82,8 @@ def test_sandbox_context_manager(api_key):
         api_key=api_key,
         base_url=BASE_URL,
     ) as sandbox:
+        # Register sandbox for automatic cleanup (safety net)
+        _register_sandbox(sandbox)
         sandbox_id = sandbox.sandbox_id
 
         # Use sandbox
@@ -104,6 +109,8 @@ def test_code_execution_workflow(api_key):
             api_key=api_key,
             base_url=BASE_URL,
         )
+        # Register sandbox for automatic cleanup (safety net)
+        _register_sandbox(sandbox)
 
         # Step 1: Install a package (if needed)
         # Note: code-interpreter template should have common packages
@@ -149,6 +156,8 @@ def test_file_operations_workflow(api_key):
             api_key=api_key,
             base_url=BASE_URL,
         )
+        # Register sandbox for automatic cleanup (safety net)
+        _register_sandbox(sandbox)
 
         # Step 1: Create directory structure
         sandbox.files.mkdir("/workspace/project")
@@ -195,6 +204,8 @@ def test_environment_variables_workflow(api_key):
             api_key=api_key,
             base_url=BASE_URL,
         )
+        # Register sandbox for automatic cleanup (safety net)
+        _register_sandbox(sandbox)
 
         # Step 1: Set multiple environment variables
         sandbox.env.set_all({

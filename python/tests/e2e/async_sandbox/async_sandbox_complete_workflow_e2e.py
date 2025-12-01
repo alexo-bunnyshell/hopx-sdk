@@ -14,6 +14,9 @@ import pytest
 import asyncio
 from hopx_ai import AsyncSandbox, ExecutionResult
 
+# Import cleanup registration functions
+from tests.conftest import _register_async_sandbox
+
 BASE_URL = os.getenv("HOPX_TEST_BASE_URL", "https://api-eu.hopx.dev")
 TEST_TEMPLATE = os.getenv("HOPX_TEST_TEMPLATE", "code-interpreter")
 
@@ -30,6 +33,8 @@ async def test_complete_async_sandbox_workflow(api_key):
             base_url=BASE_URL,
             timeout_seconds=600,
         ) as sandbox:
+            # Register sandbox for automatic cleanup (safety net)
+            _register_async_sandbox(sandbox)
             sandbox_id = sandbox.sandbox_id
             print(f"\nE2E: Created async sandbox {sandbox_id}")
 

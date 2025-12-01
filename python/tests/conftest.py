@@ -343,22 +343,30 @@ def cleanup_sandbox():
     in your test. Append any sandbox you create to the returned list, and
     they will be automatically cleaned up after the test, even if the test fails.
     
-    Sandboxes are also automatically registered in the global registry for
-    session-level cleanup as a safety net.
+    Sandboxes are automatically registered in the global registry for
+    session-level cleanup as a safety net when appended to the list.
     
     Example:
         def test_custom_sandbox(api_key, cleanup_sandbox):
             sandbox = Sandbox.create(template="custom", api_key=api_key)
-            cleanup_sandbox.append(sandbox)
-            _register_sandbox(sandbox)  # Also register globally
+            cleanup_sandbox.append(sandbox)  # Automatically registered for cleanup
             # ... test code ...
     """
     sandboxes_to_cleanup = []
+    
+    # Custom list class that auto-registers sandboxes when appended
+    class AutoRegisterList(list):
+        def append(self, sandbox):
+            super().append(sandbox)
+            if sandbox is not None:
+                _register_sandbox(sandbox)
+    
+    cleanup_list = AutoRegisterList()
     try:
-        yield sandboxes_to_cleanup
+        yield cleanup_list
     finally:
         # Always cleanup, even if test fails
-        for sandbox in sandboxes_to_cleanup:
+        for sandbox in cleanup_list:
             if sandbox is not None:
                 try:
                     sandbox.kill()
@@ -377,22 +385,28 @@ async def cleanup_async_sandbox():
     in your test. Append any sandbox you create to the returned list, and
     they will be automatically cleaned up after the test, even if the test fails.
     
-    Sandboxes are also automatically registered in the global registry for
-    session-level cleanup as a safety net.
+    Sandboxes are automatically registered in the global registry for
+    session-level cleanup as a safety net when appended to the list.
     
     Example:
         async def test_custom_sandbox(api_key, cleanup_async_sandbox):
             sandbox = await AsyncSandbox.create(template="custom", api_key=api_key)
-            cleanup_async_sandbox.append(sandbox)
-            _register_async_sandbox(sandbox)  # Also register globally
+            cleanup_async_sandbox.append(sandbox)  # Automatically registered for cleanup
             # ... test code ...
     """
-    sandboxes_to_cleanup = []
+    # Custom list class that auto-registers sandboxes when appended
+    class AutoRegisterList(list):
+        def append(self, sandbox):
+            super().append(sandbox)
+            if sandbox is not None:
+                _register_async_sandbox(sandbox)
+    
+    cleanup_list = AutoRegisterList()
     try:
-        yield sandboxes_to_cleanup
+        yield cleanup_list
     finally:
         # Always cleanup, even if test fails
-        for sandbox in sandboxes_to_cleanup:
+        for sandbox in cleanup_list:
             if sandbox is not None:
                 try:
                     await sandbox.kill()

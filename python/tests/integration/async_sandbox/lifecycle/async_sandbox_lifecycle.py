@@ -14,6 +14,9 @@ import asyncio
 from hopx_ai import AsyncSandbox
 from hopx_ai.errors import NotFoundError, HopxError
 
+# Import cleanup registration functions
+from tests.conftest import _register_async_sandbox
+
 BASE_URL = os.getenv("HOPX_TEST_BASE_URL", "https://api-eu.hopx.dev")
 TEST_TEMPLATE = os.getenv("HOPX_TEST_TEMPLATE", "code-interpreter")
 
@@ -78,6 +81,8 @@ class TestAsyncSandboxLifecycle:
             api_key=api_key,
             base_url=BASE_URL,
         ) as sandbox:
+            # Register sandbox for automatic cleanup (safety net)
+            _register_async_sandbox(sandbox)
             sandbox_id = sandbox.sandbox_id
             info = await sandbox.get_info()
             assert info.status in ("running", "creating")

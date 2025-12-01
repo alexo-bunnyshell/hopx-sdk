@@ -358,7 +358,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .
-          pip install pytest pytest-asyncio pytest-xdist pytest-cov pytest-html
+          pip install pytest pytest-asyncio pytest-xdist pytest-cov pytest-html pytest-timeout
 
       - name: Run integration tests
         if: needs.determine-tests.outputs.run_integration == 'true'

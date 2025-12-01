@@ -28,8 +28,12 @@ Test Environment:
 import os
 import pytest
 import time
+import logging
 from hopx_ai import Template, AsyncSandbox
 from hopx_ai.template import BuildOptions, wait_for_port, wait_for_url, wait_for_file, wait_for_process, wait_for_command
+
+# Import cleanup registration functions
+from tests.conftest import _register_template
 
 # Import debugging utilities
 try:
@@ -76,7 +80,8 @@ class TestTemplateReadyChecks:
     """
 
     @pytest.mark.asyncio
-    async def test_wait_for_port(self, api_key, template_name):
+    @pytest.mark.timeout(300)
+    async def test_wait_for_port(self, api_key, template_name, cleanup_template):
         """
         Test wait_for_port ready check function.
         
@@ -139,6 +144,10 @@ EOF""")
 
         assert result.template_id is not None
 
+        # Register template for automatic cleanup (safety net)
+        template_id = str(result.template_id)
+        cleanup_template(template_id, api_key, BASE_URL)
+        
         # Cleanup
         try:
             await AsyncSandbox.delete_template(
@@ -146,11 +155,13 @@ EOF""")
                 api_key=api_key,
                 base_url=BASE_URL,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger = logging.getLogger("hopx.test.cleanup")
+            logger.warning(f"Failed to cleanup template {template_id}: {e}")
 
     @pytest.mark.asyncio
-    async def test_wait_for_url(self, api_key, template_name):
+    @pytest.mark.timeout(300)
+    async def test_wait_for_url(self, api_key, template_name, cleanup_template):
         """
         Test wait_for_url ready check function.
         
@@ -213,6 +224,10 @@ EOF""")
 
         assert result.template_id is not None
 
+        # Register template for automatic cleanup (safety net)
+        template_id = str(result.template_id)
+        cleanup_template(template_id, api_key, BASE_URL)
+        
         # Cleanup
         try:
             await AsyncSandbox.delete_template(
@@ -220,11 +235,13 @@ EOF""")
                 api_key=api_key,
                 base_url=BASE_URL,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger = logging.getLogger("hopx.test.cleanup")
+            logger.warning(f"Failed to cleanup template {template_id}: {e}")
 
     @pytest.mark.asyncio
-    async def test_wait_for_file(self, api_key, template_name):
+    @pytest.mark.timeout(300)
+    async def test_wait_for_file(self, api_key, template_name, cleanup_template):
         """
         Test wait_for_file ready check function.
         
@@ -274,6 +291,10 @@ EOF""")
 
         assert result.template_id is not None
 
+        # Register template for automatic cleanup (safety net)
+        template_id = str(result.template_id)
+        cleanup_template(template_id, api_key, BASE_URL)
+        
         # Cleanup
         try:
             await AsyncSandbox.delete_template(
@@ -281,11 +302,13 @@ EOF""")
                 api_key=api_key,
                 base_url=BASE_URL,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger = logging.getLogger("hopx.test.cleanup")
+            logger.warning(f"Failed to cleanup template {template_id}: {e}")
 
     @pytest.mark.asyncio
-    async def test_wait_for_process(self, api_key, template_name):
+    @pytest.mark.timeout(300)
+    async def test_wait_for_process(self, api_key, template_name, cleanup_template):
         """
         Test wait_for_process ready check function.
         
@@ -335,6 +358,10 @@ EOF""")
 
         assert result.template_id is not None
 
+        # Register template for automatic cleanup (safety net)
+        template_id = str(result.template_id)
+        cleanup_template(template_id, api_key, BASE_URL)
+        
         # Cleanup
         try:
             await AsyncSandbox.delete_template(
@@ -342,11 +369,13 @@ EOF""")
                 api_key=api_key,
                 base_url=BASE_URL,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger = logging.getLogger("hopx.test.cleanup")
+            logger.warning(f"Failed to cleanup template {template_id}: {e}")
 
     @pytest.mark.asyncio
-    async def test_wait_for_command(self, api_key, template_name):
+    @pytest.mark.timeout(300)
+    async def test_wait_for_command(self, api_key, template_name, cleanup_template):
         """
         Test wait_for_command ready check function.
         
@@ -404,6 +433,10 @@ EOF""")
 
         assert result.template_id is not None
 
+        # Register template for automatic cleanup (safety net)
+        template_id = str(result.template_id)
+        cleanup_template(template_id, api_key, BASE_URL)
+        
         # Cleanup
         try:
             await AsyncSandbox.delete_template(
@@ -411,6 +444,7 @@ EOF""")
                 api_key=api_key,
                 base_url=BASE_URL,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger = logging.getLogger("hopx.test.cleanup")
+            logger.warning(f"Failed to cleanup template {template_id}: {e}")
 

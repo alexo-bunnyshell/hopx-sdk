@@ -26,8 +26,12 @@ Test Environment:
 import os
 import pytest
 import time
+import logging
 from hopx_ai import Template, AsyncSandbox
 from hopx_ai.template import BuildOptions, wait_for_port
+
+# Import cleanup registration functions
+from tests.conftest import _register_template, _register_async_sandbox
 
 # Import debugging utilities
 try:
@@ -76,7 +80,8 @@ class TestTemplateBuilding:
     """
 
     @pytest.mark.asyncio
-    async def test_create_simple_template(self, api_key, template_name):
+    @pytest.mark.timeout(300)
+    async def test_create_simple_template(self, api_key, template_name, cleanup_template):
         """
         Test creating a simple template with basic configuration.
         
@@ -123,6 +128,10 @@ class TestTemplateBuilding:
         assert result.build_id is not None
         assert result.duration > 0
 
+        # Register template for automatic cleanup (safety net)
+        template_id = str(result.template_id)
+        cleanup_template(template_id, api_key, BASE_URL)
+        
         # Cleanup: Delete the template
         try:
             await AsyncSandbox.delete_template(
@@ -130,11 +139,13 @@ class TestTemplateBuilding:
                 api_key=api_key,
                 base_url=BASE_URL,
             )
-        except Exception:
-            pass  # Ignore cleanup errors
+        except Exception as e:
+            logger = logging.getLogger("hopx.test.cleanup")
+            logger.warning(f"Failed to cleanup template {template_id}: {e}")
 
     @pytest.mark.asyncio
-    async def test_create_template_with_start_cmd(self, api_key, template_name):
+    @pytest.mark.timeout(300)
+    async def test_create_template_with_start_cmd(self, api_key, template_name, cleanup_template):
         """
         Test creating template with start command and ready check.
         
@@ -201,31 +212,41 @@ EOF""")
 
         assert result.template_id is not None
 
-        # Create sandbox from template (can take 30+ seconds)
-        # Use template_id from build result, not template name
-        with timed_operation("AsyncSandbox.create", warn_threshold=30.0, template=template_name):
-            async with AsyncSandbox.create(
-                template_id=result.template_id,
-                api_key=api_key,
-                base_url=BASE_URL,
-                timeout_seconds=120,  # Add timeout to prevent hanging
-            ) as sandbox:
-                # Verify sandbox is running
-                info = await sandbox.get_info()
-                assert info.status == "running"
+        # Register template for automatic cleanup (safety net)
+        template_id = str(result.template_id)
+        cleanup_template(template_id, api_key, BASE_URL)
         
-        # Cleanup template
         try:
-            await AsyncSandbox.delete_template(
-                template_id=result.template_id,
-                api_key=api_key,
-                base_url=BASE_URL,
-            )
-        except Exception:
-            pass
+            # Create sandbox from template (can take 30+ seconds)
+            # Use template_id from build result, not template name
+            with timed_operation("AsyncSandbox.create", warn_threshold=30.0, template=template_name):
+                async with AsyncSandbox.create(
+                    template_id=result.template_id,
+                    api_key=api_key,
+                    base_url=BASE_URL,
+                    timeout_seconds=120,  # Add timeout to prevent hanging
+                ) as sandbox:
+                    # Register sandbox for cleanup
+                    _register_async_sandbox(sandbox)
+                    
+                    # Verify sandbox is running
+                    info = await sandbox.get_info()
+                    assert info.status == "running"
+        finally:
+            # Always cleanup template, even if test fails
+            try:
+                await AsyncSandbox.delete_template(
+                    template_id=result.template_id,
+                    api_key=api_key,
+                    base_url=BASE_URL,
+                )
+            except Exception as e:
+                logger = logging.getLogger("hopx.test.cleanup")
+                logger.warning(f"Failed to cleanup template {template_id}: {e}")
 
     @pytest.mark.asyncio
-    async def test_template_from_ubuntu(self, api_key, template_name):
+    @pytest.mark.timeout(300)
+    async def test_template_from_ubuntu(self, api_key, template_name, cleanup_template):
         """
         Test creating template from Ubuntu base image.
         
@@ -268,6 +289,10 @@ EOF""")
 
         assert result.template_id is not None
 
+        # Register template for automatic cleanup (safety net)
+        template_id = str(result.template_id)
+        cleanup_template(template_id, api_key, BASE_URL)
+        
         # Cleanup
         try:
             await AsyncSandbox.delete_template(
@@ -275,6 +300,7 @@ EOF""")
                 api_key=api_key,
                 base_url=BASE_URL,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger = logging.getLogger("hopx.test.cleanup")
+            logger.warning(f"Failed to cleanup template {template_id}: {e}")
 
