@@ -49,8 +49,14 @@ CLAUDE.md
 .cursor/
 
 # avoid accidental garbage collection
+*.md
 !README.md
+!cli/*.md
+!cli/scripts/*.md
+!cli/tests/*.md
 test*.py
+!cli/tests/unit/**/test_*.py
+!cli/tests/e2e*.py
 check*.py
 *.txt
 
