@@ -95,17 +95,21 @@ Tests for desktop automation features:
 - Debug operations
 
 #### Template Tests (`integration/template/`)
+**Status:** ✅ **Complete** - Template tests are fully implemented and validated.
+
 Tests for template building and management:
-- Template builder methods
+- Template builder methods (from_python_image, from_ubuntu_image, etc.)
 - Template building workflows
-- Template ready checks
+- Template ready checks (wait_for_port, wait_for_url, wait_for_file, wait_for_process, wait_for_command)
 
 #### Terminal Tests (`integration/terminal/`)
-**Status:** ⚠️ **Postponed** - Terminal tests have been postponed for future implementation.
+**Status:** ✅ **Complete** - Terminal tests are fully implemented and validated.
 
 Tests for terminal and WebSocket features:
 - WebSocket terminal connections
-- Terminal operations
+- Terminal input/output operations
+- Terminal resize operations
+- Terminal output iteration
 
 ### Running Integration Tests
 
@@ -128,6 +132,9 @@ pytest tests/integration/desktop/
 
 # All template tests
 pytest tests/integration/template/
+
+# All terminal tests
+pytest tests/integration/terminal/
 ```
 
 #### Run Tests by File
@@ -160,7 +167,7 @@ For detailed commands for every test file, class, and method, see [TEST_COMMANDS
 
 ## End-to-End Tests
 
-**Status:** ⚠️ **Postponed** - E2E tests have been postponed for future implementation alongside terminal tests.
+**Status:** ⚠️ **Postponed** - E2E tests have been postponed for future implementation.
 
 E2E tests verify complete user workflows and scenarios using the SDK. These tests ensure that multiple features work together correctly.
 
@@ -201,36 +208,39 @@ The desktop automation tests (`integration/desktop/`) are currently pending due 
 
 **Note:** The desktop test files are present and ready to run once the desktop image requirement is met.
 
-### Terminal Tests - Postponed
+### Terminal Tests - Complete ✅
 
-**Status:** Postponed for future implementation
+**Status:** Complete and validated
 
-The terminal/WebSocket tests (`integration/terminal/`) have been postponed for a later time. These tests cover:
+The terminal/WebSocket tests (`integration/terminal/`) are fully implemented and tested. These tests cover:
 
 - WebSocket terminal connections
-- Terminal operations and interactions
+- Terminal input/output operations
+- Terminal resize operations
+- Terminal output iteration with proper timeout handling
 
-**Reason:** Terminal testing functionality is planned for future development cycles.
+**Recent Updates:** Tests have been updated to follow CLI implementation patterns with proper timeout handling and shell cleanup.
 
 ### E2E Tests - Postponed
 
 **Status:** Postponed for future implementation
 
-The end-to-end tests (`e2e/`) have been postponed along with terminal tests. These tests are designed to verify complete user workflows and scenarios:
+The end-to-end tests (`e2e/`) have been postponed for future implementation. These tests are designed to verify complete user workflows and scenarios:
 
 - Complete sandbox lifecycle workflows
 - Complete async sandbox workflows
 - Multi-feature integration scenarios
 
-**Reason:** E2E testing functionality is planned for future development cycles alongside terminal testing.
+**Reason:** E2E testing functionality is planned for future development cycles.
 
-### All Other Tests - Complete
+### Completed Test Categories ✅
 
-All other test categories have been fully implemented, run, and validated:
+The following test categories have been fully implemented, run, and validated:
 
 - ✅ **Sandbox Tests** - All integration tests for synchronous `Sandbox` class
 - ✅ **AsyncSandbox Tests** - All integration tests for asynchronous `AsyncSandbox` class
-- ✅ **Template Tests** - Template building and management tests
+- ✅ **Template Tests** - Template building and management tests (builder methods, building workflows, ready checks)
+- ✅ **Terminal Tests** - Terminal/WebSocket tests (connections, input/output, resize operations)
 
 ## Setup
 
