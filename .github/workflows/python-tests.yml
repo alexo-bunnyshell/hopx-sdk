@@ -368,6 +368,8 @@ jobs:
           INTEGRATION_PATHS=$(echo "${{ needs.determine-tests.outputs.test_paths }}" | grep -o "tests/integration/[^ ]*" | tr '\n' ' ' || echo "tests/integration/")
           pytest $INTEGRATION_PATHS \
             -v \
+            --cov=hopx_ai \
+            --cov-report=term-missing \
             --showlocals \
             --junitxml=tests/reports/integration/junit_${{ matrix.python-version }}.xml \
             --html=tests/reports/integration/report_${{ matrix.python-version }}.html \
@@ -387,6 +389,9 @@ jobs:
           E2E_PATHS=$(echo "${{ needs.determine-tests.outputs.test_paths }}" | grep -o "tests/e2e/[^ ]*" | tr '\n' ' ' || echo "tests/e2e/")
           pytest $E2E_PATHS \
             -v \
+            --cov=hopx_ai \
+            --cov-report=term-missing \
+            --cov-append \
             --showlocals \
             --junitxml=tests/reports/e2e/junit_${{ matrix.python-version }}.xml \
             --html=tests/reports/e2e/report_${{ matrix.python-version }}.html \
