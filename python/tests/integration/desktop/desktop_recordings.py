@@ -21,53 +21,53 @@ DESKTOP_TEMPLATE = os.getenv("HOPX_DESKTOP_TEMPLATE", "399")
 class TestDesktopRecordings:
     """Test Desktop recording operations."""
 
-    def test_start_recording(self, sandbox):
+    def test_start_recording(self, desktop_sandbox):
         """Test starting screen recording."""
         try:
-            recording_info = sandbox.desktop.start_recording(fps=10, format="mp4")
+            recording_info = desktop_sandbox.desktop.start_recording(fps=10, format="mp4")
             assert recording_info is not None
             recording_id = recording_info.recording_id if hasattr(recording_info, "recording_id") else recording_info.get("recording_id")
             assert recording_id is not None
             
             # Stop recording
             time.sleep(1)  # Record for a moment
-            sandbox.desktop.stop_recording(recording_id)
+            desktop_sandbox.desktop.stop_recording(recording_id)
         except DesktopNotAvailableError:
             pytest.skip("Desktop not available in this template")
 
-    def test_get_recording_status(self, sandbox):
+    def test_get_recording_status(self, desktop_sandbox):
         """Test getting recording status."""
         try:
             # Start recording
-            recording_info = sandbox.desktop.start_recording()
+            recording_info = desktop_sandbox.desktop.start_recording()
             recording_id = recording_info.recording_id if hasattr(recording_info, "recording_id") else recording_info.get("recording_id")
             
             # Get status
-            status = sandbox.desktop.get_recording_status(recording_id)
+            status = desktop_sandbox.desktop.get_recording_status(recording_id)
             assert status is not None
             
             # Stop recording
-            sandbox.desktop.stop_recording(recording_id)
+            desktop_sandbox.desktop.stop_recording(recording_id)
         except DesktopNotAvailableError:
             pytest.skip("Desktop not available in this template")
 
-    def test_download_recording(self, sandbox):
+    def test_download_recording(self, desktop_sandbox):
         """Test downloading recorded video."""
         try:
             # Start recording
-            recording_info = sandbox.desktop.start_recording()
+            recording_info = desktop_sandbox.desktop.start_recording()
             recording_id = recording_info.recording_id if hasattr(recording_info, "recording_id") else recording_info.get("recording_id")
             
             time.sleep(2)  # Record for a moment
             
             # Stop recording
-            sandbox.desktop.stop_recording(recording_id)
+            desktop_sandbox.desktop.stop_recording(recording_id)
             
             # Wait a bit for recording to finalize
             time.sleep(2)
             
             # Download recording
-            video_bytes = sandbox.desktop.download_recording(recording_id)
+            video_bytes = desktop_sandbox.desktop.download_recording(recording_id)
             assert isinstance(video_bytes, bytes)
             assert len(video_bytes) > 0
         except DesktopNotAvailableError:

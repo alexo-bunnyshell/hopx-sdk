@@ -19,19 +19,19 @@ DESKTOP_TEMPLATE = os.getenv("HOPX_DESKTOP_TEMPLATE", "399")
 class TestDesktopDebug:
     """Test Desktop debug operations."""
 
-    def test_get_debug_logs(self, sandbox):
+    def test_get_debug_logs(self, desktop_sandbox):
         """Test getting debug logs."""
         try:
-            logs = sandbox.desktop.get_debug_logs()
+            logs = desktop_sandbox.desktop.get_debug_logs()
             assert isinstance(logs, list)
             # May have 0 or more log entries
         except DesktopNotAvailableError:
             pytest.skip("Desktop not available in this template")
 
-    def test_get_debug_processes(self, sandbox):
+    def test_get_debug_processes(self, desktop_sandbox):
         """Test getting debug process information."""
         try:
-            processes = sandbox.desktop.get_debug_processes()
+            processes = desktop_sandbox.desktop.get_debug_processes()
             assert isinstance(processes, list)
             # May have 0 or more processes
         except DesktopNotAvailableError:

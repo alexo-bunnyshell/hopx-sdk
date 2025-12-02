@@ -20,28 +20,28 @@ DESKTOP_TEMPLATE = os.getenv("HOPX_DESKTOP_TEMPLATE", "399")
 class TestDesktopWindows:
     """Test Desktop window management operations."""
 
-    def test_get_windows(self, sandbox):
+    def test_get_windows(self, desktop_sandbox):
         """Test getting list of all windows."""
         try:
-            windows = sandbox.desktop.get_windows()
+            windows = desktop_sandbox.desktop.get_windows()
             assert isinstance(windows, list)
             # May have 0 or more windows depending on template
         except DesktopNotAvailableError:
             pytest.skip("Desktop not available in this template")
 
-    def test_get_display(self, sandbox):
+    def test_get_display(self, desktop_sandbox):
         """Test getting display information."""
         try:
-            display_info = sandbox.desktop.get_display()
+            display_info = desktop_sandbox.desktop.get_display()
             assert display_info is not None
             # Display info should have resolution information
         except DesktopNotAvailableError:
             pytest.skip("Desktop not available in this template")
 
-    def test_get_available_resolutions(self, sandbox):
+    def test_get_available_resolutions(self, desktop_sandbox):
         """Test getting available screen resolutions."""
         try:
-            resolutions = sandbox.desktop.get_available_resolutions()
+            resolutions = desktop_sandbox.desktop.get_available_resolutions()
             assert isinstance(resolutions, list)
             # Should have at least one resolution
             if resolutions:

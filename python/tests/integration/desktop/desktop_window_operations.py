@@ -23,64 +23,64 @@ DESKTOP_TEMPLATE = os.getenv("HOPX_DESKTOP_TEMPLATE", "399")
 class TestDesktopWindowOperations:
     """Test Desktop window operations."""
 
-    def test_focus_window(self, sandbox):
+    def test_focus_window(self, desktop_sandbox):
         """Test focusing a window."""
         try:
-            windows = sandbox.desktop.get_windows()
+            windows = desktop_sandbox.desktop.get_windows()
             if windows:
                 window_id = windows[0].window_id if hasattr(windows[0], "window_id") else windows[0].get("id")
                 if window_id:
-                    sandbox.desktop.focus_window(window_id)
+                    desktop_sandbox.desktop.focus_window(window_id)
                     # Focus should succeed without error
         except DesktopNotAvailableError:
             pytest.skip("Desktop not available in this template")
 
-    def test_resize_window(self, sandbox):
+    def test_resize_window(self, desktop_sandbox):
         """Test resizing a window."""
         try:
-            windows = sandbox.desktop.get_windows()
+            windows = desktop_sandbox.desktop.get_windows()
             if windows:
                 window_id = windows[0].window_id if hasattr(windows[0], "window_id") else windows[0].get("id")
                 if window_id:
-                    sandbox.desktop.resize_window(window_id, width=800, height=600)
+                    desktop_sandbox.desktop.resize_window(window_id, width=800, height=600)
                     # Resize should succeed without error
         except DesktopNotAvailableError:
             pytest.skip("Desktop not available in this template")
 
-    def test_minimize_window(self, sandbox):
+    def test_minimize_window(self, desktop_sandbox):
         """Test minimizing a window."""
         try:
-            windows = sandbox.desktop.get_windows()
+            windows = desktop_sandbox.desktop.get_windows()
             if windows:
                 window_id = windows[0].window_id if hasattr(windows[0], "window_id") else windows[0].get("id")
                 if window_id:
-                    sandbox.desktop.minimize_window(window_id)
+                    desktop_sandbox.desktop.minimize_window(window_id)
                     # Minimize should succeed without error
         except DesktopNotAvailableError:
             pytest.skip("Desktop not available in this template")
 
-    def test_set_resolution(self, sandbox):
+    def test_set_resolution(self, desktop_sandbox):
         """Test setting screen resolution."""
         try:
             # Get available resolutions first
-            resolutions = sandbox.desktop.get_available_resolutions()
+            resolutions = desktop_sandbox.desktop.get_available_resolutions()
             if resolutions:
                 # Try to set to first available resolution
                 width, height = resolutions[0]
-                display_info = sandbox.desktop.set_resolution(width, height)
+                display_info = desktop_sandbox.desktop.set_resolution(width, height)
                 assert display_info is not None
         except DesktopNotAvailableError:
             pytest.skip("Desktop not available in this template")
 
-    def test_get_clipboard_history(self, sandbox):
+    def test_get_clipboard_history(self, desktop_sandbox):
         """Test getting clipboard history."""
         try:
             # Set some clipboard content first
-            sandbox.desktop.set_clipboard("Test clipboard entry 1")
-            sandbox.desktop.set_clipboard("Test clipboard entry 2")
+            desktop_sandbox.desktop.set_clipboard("Test clipboard entry 1")
+            desktop_sandbox.desktop.set_clipboard("Test clipboard entry 2")
             
             # Get clipboard history
-            history = sandbox.desktop.get_clipboard_history()
+            history = desktop_sandbox.desktop.get_clipboard_history()
             assert isinstance(history, list)
             # May have 0 or more entries depending on implementation
         except DesktopNotAvailableError:

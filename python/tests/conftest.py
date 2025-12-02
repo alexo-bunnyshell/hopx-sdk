@@ -460,6 +460,53 @@ async def async_sandbox(api_key, test_base_url, test_template):
 
 
 @pytest.fixture
+def desktop_sandbox(api_key, test_base_url):
+    """
+    Create a sandbox with desktop-enabled template for desktop tests.
+    
+    This fixture creates a sandbox using the desktop template (ID: 399 by default,
+    configurable via HOPX_DESKTOP_TEMPLATE env var) and automatically cleans it up
+    after the test completes, even if the test fails.
+    
+    Desktop tests require a template with desktop/VNC capabilities. This fixture
+    ensures the correct template is used.
+    """
+    desktop_template = os.getenv("HOPX_DESKTOP_TEMPLATE", "399")
+    sandbox = None
+    sandbox_id = None
+    try:
+        sandbox = Sandbox.create(
+            template_id=desktop_template,  # Use template_id for desktop template
+            api_key=api_key,
+            base_url=test_base_url,
+            timeout_seconds=600,  # 10 minutes
+        )
+        sandbox_id = getattr(sandbox, 'sandbox_id', None)
+        _register_sandbox(sandbox)
+        yield sandbox
+    except Exception as e:
+        # If creation fails but we got a sandbox_id, try to clean up
+        if sandbox_id:
+            _cleanup_sandbox_by_id(sandbox_id, api_key, test_base_url, is_async=False)
+        raise e
+    finally:
+        # Always cleanup, even if test fails
+        if sandbox is not None:
+            try:
+                sandbox.kill()
+            except NotFoundError:
+                # Already deleted - that's fine
+                pass
+            except Exception as e:
+                import logging
+                logger = logging.getLogger("hopx.test.cleanup")
+                logger.warning(f"Failed to cleanup desktop sandbox {getattr(sandbox, 'sandbox_id', 'unknown')}: {e}")
+        elif sandbox_id:
+            # Sandbox object lost but we have the ID - try cleanup by ID
+            _cleanup_sandbox_by_id(sandbox_id, api_key, test_base_url, is_async=False)
+
+
+@pytest.fixture
 def cleanup_sandbox():
     """
     Fixture to ensure sandbox cleanup after test for manually created sandboxes.

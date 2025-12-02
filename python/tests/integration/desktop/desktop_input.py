@@ -20,70 +20,70 @@ DESKTOP_TEMPLATE = os.getenv("HOPX_DESKTOP_TEMPLATE", "399")
 class TestDesktopInput:
     """Test Desktop input operations."""
 
-    def test_click(self, sandbox):
+    def test_click(self, desktop_sandbox):
         """Test clicking at position."""
         try:
-            sandbox.desktop.click(100, 100)
+            desktop_sandbox.desktop.click(100, 100)
             # Click should succeed without error
         except DesktopNotAvailableError:
             pytest.skip("Desktop not available in this template")
 
-    def test_move(self, sandbox):
+    def test_move(self, desktop_sandbox):
         """Test moving mouse cursor."""
         try:
-            sandbox.desktop.move(200, 200)
+            desktop_sandbox.desktop.move(200, 200)
             # Move should succeed without error
         except DesktopNotAvailableError:
             pytest.skip("Desktop not available in this template")
 
-    def test_drag(self, sandbox):
+    def test_drag(self, desktop_sandbox):
         """Test dragging from one position to another."""
         try:
-            sandbox.desktop.drag(100, 100, 200, 200)
+            desktop_sandbox.desktop.drag(100, 100, 200, 200)
             # Drag should succeed without error
         except DesktopNotAvailableError:
             pytest.skip("Desktop not available in this template")
 
-    def test_scroll(self, sandbox):
+    def test_scroll(self, desktop_sandbox):
         """Test scrolling mouse wheel."""
         try:
-            sandbox.desktop.scroll(amount=3, direction="down")
+            desktop_sandbox.desktop.scroll(amount=3, direction="down")
             # Scroll should succeed without error
         except DesktopNotAvailableError:
             pytest.skip("Desktop not available in this template")
 
-    def test_type(self, sandbox):
+    def test_type(self, desktop_sandbox):
         """Test typing text."""
         try:
-            sandbox.desktop.type("Hello World")
+            desktop_sandbox.desktop.type("Hello World")
             # Type should succeed without error
         except DesktopNotAvailableError:
             pytest.skip("Desktop not available in this template")
 
-    def test_press(self, sandbox):
+    def test_press(self, desktop_sandbox):
         """Test pressing a key."""
         try:
-            sandbox.desktop.press("Return")
+            desktop_sandbox.desktop.press("Return")
             # Press should succeed without error
         except DesktopNotAvailableError:
             pytest.skip("Desktop not available in this template")
 
-    def test_combination(self, sandbox):
+    def test_combination(self, desktop_sandbox):
         """Test pressing key combination."""
         try:
-            sandbox.desktop.combination(["ctrl"], "c")
+            desktop_sandbox.desktop.combination(["ctrl"], "c")
             # Combination should succeed without error
         except DesktopNotAvailableError:
             pytest.skip("Desktop not available in this template")
 
-    def test_clipboard_operations(self, sandbox):
+    def test_clipboard_operations(self, desktop_sandbox):
         """Test clipboard operations."""
         try:
             # Set clipboard
-            sandbox.desktop.set_clipboard("Test clipboard content")
+            desktop_sandbox.desktop.set_clipboard("Test clipboard content")
             
             # Get clipboard
-            content = sandbox.desktop.get_clipboard()
+            content = desktop_sandbox.desktop.get_clipboard()
             assert content == "Test clipboard content"
         except DesktopNotAvailableError:
             pytest.skip("Desktop not available in this template")
