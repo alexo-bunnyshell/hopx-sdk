@@ -16,6 +16,11 @@ on:
         required: false
         type: string
         default: ''
+      python_version:
+        description: 'Python version to test (e.g., "3.10", "3.11", "3.12") - leave empty for 3.11'
+        required: false
+        type: string
+        default: '3.11'
 
 jobs:
   determine-tests:
@@ -72,7 +77,7 @@ jobs:
           echo "Test paths: $TEST_PATHS"
 
   quick-test:
-    name: Quick Test (Python 3.11)
+    name: Quick Test (Python ${{ github.event.inputs.python_version || '3.11' }})
     needs: determine-tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -81,10 +86,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python ${{ github.event.inputs.python_version || '3.11' }}
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ github.event.inputs.python_version || '3.11' }}
           cache: 'pip'
 
       - name: Install dependencies

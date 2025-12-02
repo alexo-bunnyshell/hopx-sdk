@@ -18,7 +18,8 @@ Runs the complete test suite across multiple Python versions (3.8, 3.9, 3.10, 3.
 
 **Features:**
 - **Intelligent Test Selection**: Automatically detects which tests to run based on changed files
-- Tests on 5 Python versions in parallel
+- **Python Version Selection**: Choose specific Python versions via commit messages, PR descriptions, or manual dispatch
+- Tests on 5 Python versions in parallel (default) or selected versions
 - Runs both integration and E2E tests (or specific subsets)
 - Generates test reports and coverage
 - Uploads artifacts for review
@@ -27,16 +28,17 @@ Runs the complete test suite across multiple Python versions (3.8, 3.9, 3.10, 3.
 
 ### `python-tests-quick.yml` - Quick PR Tests
 
-Runs a quick test suite on Python 3.11 for faster PR feedback.
+Runs a quick test suite on Python 3.11 (default) or specified version for faster PR feedback.
 
 **Triggers:**
 - Pull requests to `main` or `test`
-- Manual workflow dispatch (with optional feature selection)
+- Manual workflow dispatch (with optional feature and Python version selection)
 - Only runs when Python files or workflow files change
 
 **Features:**
 - **Intelligent Test Selection**: Automatically detects which tests to run based on changed files
-- Fast feedback (single Python version)
+- **Python Version Selection**: Choose specific Python version via commit messages, PR descriptions, or manual dispatch
+- Fast feedback (single Python version, default: 3.11)
 - Runs integration tests (or specific subsets)
 - Posts test results as PR comment
 - Uploads test reports as artifacts
@@ -81,11 +83,12 @@ The workflows automatically determine which tests to run based on the source cod
 
 ### How It Works
 
-1. **Test Directives** (highest priority): Check for `[test: ...]` in PR descriptions or commit messages
+1. **Test Directives** (highest priority): Check for `[test: ...]` and `[python: ...]` in PR descriptions or commit messages
 2. **Automatic Detection**: If no directives found, analyze all changed files
 3. **Smart Mapping**: Changed source files are mapped to their corresponding test directories
 4. **Multiple Classes**: If multiple classes are changed, tests for all affected areas are run
 5. **Safety Fallback**: If no specific mapping is found, all tests run (ensures nothing is missed)
+6. **Python Version Selection**: If `[python: ...]` is specified, only those versions run; otherwise all supported versions run
 
 ### Source Code to Test Mapping
 
@@ -152,16 +155,23 @@ Result: Runs all tests (safety):
 
 ### Test Directives (Recommended)
 
-You can control which tests run by adding test directives in your PR description or commit messages. This is the easiest and most flexible way to specify test scope.
+You can control which tests run and which Python versions to test by adding directives in your PR description or commit messages. This is the easiest and most flexible way to specify test scope and Python versions.
 
 #### Format
 
-Use `[test: ...]` format anywhere in your PR description or commit messages:
+Use `[test: ...]` and `[python: ...]` formats anywhere in your PR description or commit messages:
 
+**Test Scope Directives:**
 - **Run specific feature tests:** `[test: desktop]` - Runs all desktop tests
 - **Run specific test type:** `[test: integration]` - Runs all integration tests
 - **Run feature + type:** `[test: desktop, integration]` - Runs only desktop integration tests
 - **Run all tests:** `[test: all]` - Runs all tests (overrides file-based detection)
+
+**Python Version Directives:**
+- **Single version:** `[python: 3.11]` - Run tests on Python 3.11 only
+- **Multiple versions:** `[python: 3.10,3.11]` - Run tests on Python 3.10 and 3.11
+- **Multiple versions with spaces:** `[python: 3.10, 3.11, 3.12]` - Also works
+- **No directive:** Runs on all supported versions (3.8, 3.9, 3.10, 3.11, 3.12)
 
 #### Examples
 
@@ -171,11 +181,30 @@ Use `[test: ...]` format anywhere in your PR description or commit messages:
 Fixes desktop VNC connection issue
 
 [test: desktop, integration]
+[python: 3.11]
 ```
 
 **In Commit Message:**
 ```bash
-git commit -m "fix: desktop VNC bug [test: desktop]"
+git commit -m "fix: desktop VNC bug [test: desktop] [python: 3.11]"
+```
+
+**Multiple Python Versions:**
+```markdown
+## Changes
+Fixes sandbox cleanup issues
+
+[test: sandbox]
+[python: 3.10,3.11,3.12]
+```
+
+**Combined Directives:**
+```markdown
+## Changes
+Template building improvements
+
+[test: template, integration]
+[python: 3.11]
 ```
 
 **Available Test Scopes:**
@@ -192,25 +221,28 @@ git commit -m "fix: desktop VNC bug [test: desktop]"
 - `all` - Both integration and e2e (default)
 
 **Priority Order:**
-1. PR description directive (highest priority)
-2. Commit message directive
-3. File-based auto-detection (default)
+1. PR description directives (highest priority)
+2. Commit message directives
+3. Manual workflow dispatch inputs
+4. File-based auto-detection (default for test scope)
+5. All Python versions (default for Python version selection)
 
 ### Manual Test Selection
 
-You can manually trigger workflows with specific test selection:
+You can manually trigger workflows with specific test selection and Python versions:
 
 1. Go to **Actions** → Select workflow → **Run workflow**
 2. Choose options:
    - **Test type**: Choose `integration`, `e2e`, or `all`
    - **Scope**: Enter feature name (e.g., `desktop`, `sandbox`, `template`)
+   - **Python version**: Enter version(s) (e.g., `3.11` or `3.10,3.11,3.12`) - leave empty for all versions
 3. Click **Run workflow**
 
 **Manual Examples:**
-- Test type: `integration`, Scope: `desktop` → Runs desktop integration tests
-- Test type: `e2e`, Scope: `sandbox` → Runs sandbox e2e tests
-- Test type: `all`, Scope: (empty) → Auto-detects from changed files
-- Test type: `all`, Scope: `all` → Runs all tests
+- Test type: `integration`, Scope: `desktop`, Python version: `3.11` → Runs desktop integration tests on Python 3.11
+- Test type: `e2e`, Scope: `sandbox`, Python version: `3.10,3.11` → Runs sandbox e2e tests on Python 3.10 and 3.11
+- Test type: `all`, Scope: (empty), Python version: (empty) → Auto-detects from changed files, runs on all Python versions
+- Test type: `all`, Scope: `all`, Python version: `3.12` → Runs all tests on Python 3.12 only
 
 ### Customization
 
@@ -226,14 +258,19 @@ SOURCE_TO_TESTS = {
 }
 ```
 
-#### Changing Python Versions
+#### Changing Default Python Versions
 
-Edit the `matrix.python-version` in `python-tests.yml`:
+The default Python versions are defined in the workflow file. To change the default set of versions tested, edit the default value in `python-tests.yml`:
 
 ```yaml
-matrix:
-  python-version: ['3.10', '3.11', '3.12']  # Only test recent versions
+# In the "Determine Python versions to test" step
+PYTHON_VERSIONS='["3.10", "3.11", "3.12"]'  # Only test recent versions by default
 ```
+
+**Note:** You can also specify Python versions per test run using:
+- Commit messages: `[python: 3.11]`
+- PR descriptions: `[python: 3.10,3.11]`
+- Manual workflow dispatch: Enter versions in the `python_version` input field
 
 ### Skipping Tests
 

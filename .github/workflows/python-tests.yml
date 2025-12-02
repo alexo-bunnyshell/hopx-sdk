@@ -12,22 +12,30 @@ name: Python SDK Test Suite
 #   - Full test path (e.g., 'tests/integration/desktop/')
 #   - Leave empty to run all tests based on changed files
 #
+# Python Version Selection (python_version):
+#   - Comma-separated versions (e.g., '3.10,3.11' or '3.11')
+#   - Leave empty to run all supported versions (3.8, 3.9, 3.10, 3.11, 3.12)
+#
 # Configuration Methods:
-#   1. Workflow Dispatch: Use inputs 'test_type' and 'scope'
-#   2. Commit Messages: Use [test: scope] or [test: scope, type] in commit messages
-#   3. PR Description: Use [test: scope] or [test: scope, type] in PR description
-#   4. Auto-detection: If not specified, runs all tests based on changed files
+#   1. Workflow Dispatch: Use inputs 'test_type', 'scope', and 'python_version'
+#   2. Commit Messages: Use [test: scope] and [python: version] in commit messages
+#   3. PR Description: Use [test: scope] and [python: version] in PR description
+#   4. Auto-detection: If not specified, runs all tests on all Python versions based on changed files
 #
 # Test Directive Format:
 #   - [test: desktop] - Run desktop tests (all types)
 #   - [test: desktop, integration] - Run desktop integration tests only
 #   - [test: sandbox, e2e] - Run sandbox e2e tests only
 #   - [test: all] - Run all tests (overrides file-based detection)
+#   - [python: 3.11] - Run tests on Python 3.11 only
+#   - [python: 3.10,3.11,3.12] - Run tests on multiple Python versions
 #
 # Examples:
 #   - Run only desktop integration tests: test_type='integration', scope='desktop'
 #   - Run all e2e tests: test_type='e2e', scope=''
 #   - Run all tests for sandbox feature: test_type='all', scope='sandbox'
+#   - In commit/PR: [test: sandbox] [python: 3.11] - Run sandbox tests on Python 3.11
+#   - In commit/PR: [test: desktop, integration] [python: 3.10,3.11] - Run desktop integration tests on Python 3.10 and 3.11
 
 on:
   pull_request:
@@ -62,6 +70,11 @@ on:
         required: false
         type: string
         default: ''
+      python_version:
+        description: 'Python version(s) to test (comma-separated, e.g., "3.10,3.11" or "3.11") - leave empty for all versions'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   determine-tests:
@@ -89,6 +102,7 @@ jobs:
         run: |
           TEST_TYPE=""
           TEST_SCOPE=""
+          PYTHON_VERSION=""
           
           # Parse PR description if available
           if [ "${{ github.event_name }}" == "pull_request" ]; then
@@ -121,6 +135,13 @@ jobs:
                     TEST_SCOPE=$(echo "$TEST_DIRECTIVE" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
                   fi
                 fi
+              fi
+              
+              # Look for [python: ...] patterns in PR description
+              if echo "$PR_BODY" | grep -qiE '\[python:\s*([^]]+)\]'; then
+                PYTHON_DIRECTIVE=$(echo "$PR_BODY" | grep -oiE '\[python:\s*([^]]+)\]' | head -1 | sed 's/\[python:\s*//;s/\]//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+                echo "Found Python version directive in PR description: $PYTHON_DIRECTIVE"
+                PYTHON_VERSION="$PYTHON_DIRECTIVE"
               fi
             fi
           fi
@@ -168,6 +189,16 @@ jobs:
                 fi
               fi
             fi
+            
+            # Parse commit messages for [python: ...] patterns
+            COMMIT_PYTHON_DIRECTIVE=$(echo "$COMMITS" | grep -oiE '\[python:\s*([^]]+)\]' | head -1 | sed 's/\[python:\s*//;s/\]//' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            if [ -n "$COMMIT_PYTHON_DIRECTIVE" ]; then
+              echo "Found Python version directive in commit message: $COMMIT_PYTHON_DIRECTIVE"
+              # Only use commit directive if PR description didn't override
+              if [ -z "$PYTHON_VERSION" ]; then
+                PYTHON_VERSION="$COMMIT_PYTHON_DIRECTIVE"
+              fi
+            fi
           fi
           
           # Default to workflow dispatch inputs if no directives found
@@ -182,17 +213,28 @@ jobs:
             fi
           fi
           
+          # Default Python version from workflow dispatch input if not found in directives
+          if [ -z "$PYTHON_VERSION" ]; then
+            PYTHON_VERSION_INPUT="${{ github.event.inputs.python_version || '' }}"
+            if [ -n "$PYTHON_VERSION_INPUT" ]; then
+              PYTHON_VERSION="$PYTHON_VERSION_INPUT"
+            fi
+          fi
+          
           # Set defaults
           TEST_TYPE="${TEST_TYPE:-all}"
           
           echo "test_type=$TEST_TYPE" >> $GITHUB_OUTPUT
           echo "test_scope=$TEST_SCOPE" >> $GITHUB_OUTPUT
+          echo "python_version=$PYTHON_VERSION" >> $GITHUB_OUTPUT
           echo "TEST_TYPE=$TEST_TYPE" >> $GITHUB_ENV
           echo "TEST_SCOPE=$TEST_SCOPE" >> $GITHUB_ENV
+          echo "PYTHON_VERSION=$PYTHON_VERSION" >> $GITHUB_ENV
           
           echo "Parsed test configuration:"
           echo "  Type: $TEST_TYPE"
           echo "  Scope: ${TEST_SCOPE:-'(auto-detect from files)'}"
+          echo "  Python version: ${PYTHON_VERSION:-'(all versions)'}"
 
       - name: Get changed files
         id: changed-files
@@ -332,6 +374,21 @@ jobs:
           echo "Test type: $TEST_TYPE"
           echo "Test scope: ${TEST_SCOPE:-'(all)'}"
           echo "Test paths: $TEST_PATHS"
+          
+          # Determine Python versions to test
+          # Get from parsed directives (commit/PR) or workflow dispatch input
+          PYTHON_VERSION_INPUT="${PYTHON_VERSION:-${{ github.event.inputs.python_version || '' }}}"
+          if [ -n "$PYTHON_VERSION_INPUT" ]; then
+            # Parse comma-separated versions and create JSON array
+            # Convert "3.10,3.11" to ["3.10", "3.11"]
+            PYTHON_VERSIONS=$(echo "$PYTHON_VERSION_INPUT" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed 's/^/"/;s/$/"/' | tr '\n' ',' | sed 's/,$//')
+            PYTHON_VERSIONS="[$PYTHON_VERSIONS]"
+          else
+            # Default to all supported versions
+            PYTHON_VERSIONS='["3.8", "3.9", "3.10", "3.11", "3.12"]'
+          fi
+          echo "python_versions=$PYTHON_VERSIONS" >> $GITHUB_OUTPUT
+          echo "Python versions: $PYTHON_VERSIONS"
 
   test:
     name: Test Python SDK
@@ -340,7 +397,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+        python-version: ${{ fromJSON(needs.determine-tests.outputs.python_versions) }}
       fail-fast: false
 
     steps:

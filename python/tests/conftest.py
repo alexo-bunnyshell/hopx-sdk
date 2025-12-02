@@ -14,6 +14,7 @@ import weakref
 from pathlib import Path
 from typing import Set, Union
 from hopx_ai import Sandbox, AsyncSandbox
+from hopx_ai.errors import NotFoundError
 
 # Load .env file if it exists (for test environment variables)
 try:
@@ -36,6 +37,10 @@ TEST_TEMPLATE = os.getenv("HOPX_TEST_TEMPLATE", "code-interpreter")
 _sandbox_registry: Set[weakref.ref] = set()
 _async_sandbox_registry: Set[weakref.ref] = set()
 
+# Track sandbox IDs separately for cleanup when objects are lost
+# Format: (sandbox_id, api_key, base_url, is_async)
+_sandbox_id_registry: Set[tuple] = set()
+
 # Global template registry for cleanup
 # Store template_id, api_key, and base_url for cleanup
 _template_registry: Set[tuple] = set()  # (template_id, api_key, base_url)
@@ -49,6 +54,22 @@ def _register_sandbox(sandbox: Sandbox):
     
     ref = weakref.ref(sandbox, cleanup_ref)
     _sandbox_registry.add(ref)
+    
+    # Also track sandbox_id separately for cleanup when object is lost
+    try:
+        sandbox_id = getattr(sandbox, 'sandbox_id', None)
+        # Get api_key and base_url from the client
+        client = getattr(sandbox, '_client', None)
+        api_key = None
+        base_url = BASE_URL
+        if client:
+            api_key = getattr(client, 'api_key', None)
+            base_url = getattr(client, 'base_url', BASE_URL)
+        if sandbox_id and api_key:
+            _sandbox_id_registry.add((sandbox_id, api_key, base_url, False))
+    except Exception:
+        pass  # If we can't get the ID, weak ref is still there
+    
     return sandbox
 
 
@@ -60,6 +81,22 @@ def _register_async_sandbox(sandbox: AsyncSandbox):
     
     ref = weakref.ref(sandbox, cleanup_ref)
     _async_sandbox_registry.add(ref)
+    
+    # Also track sandbox_id separately for cleanup when object is lost
+    try:
+        sandbox_id = getattr(sandbox, 'sandbox_id', None)
+        # Get api_key and base_url from the client
+        client = getattr(sandbox, '_client', None)
+        api_key = None
+        base_url = BASE_URL
+        if client:
+            api_key = getattr(client, 'api_key', None)
+            base_url = getattr(client, 'base_url', BASE_URL)
+        if sandbox_id and api_key:
+            _sandbox_id_registry.add((sandbox_id, api_key, base_url, True))
+    except Exception:
+        pass  # If we can't get the ID, weak ref is still there
+    
     return sandbox
 
 
@@ -78,22 +115,72 @@ def _register_template(template_id: str, api_key: str, base_url: str = None):
     return template_id
 
 
+def _cleanup_sandbox_by_id(sandbox_id: str, api_key: str, base_url: str, is_async: bool = False):
+    """
+    Helper function to clean up a sandbox by ID when the object is lost.
+    
+    This is useful when sandbox creation fails but a sandbox was created on the server,
+    or when the sandbox object is garbage collected but we still have the ID.
+    """
+    if not sandbox_id or not api_key:
+        return False
+    
+    try:
+        if is_async:
+            import asyncio
+            from hopx_ai import AsyncSandbox
+            
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            temp_sandbox = AsyncSandbox(
+                sandbox_id=sandbox_id,
+                api_key=api_key,
+                base_url=base_url,
+            )
+            loop.run_until_complete(temp_sandbox.kill())
+        else:
+            from hopx_ai import Sandbox
+            temp_sandbox = Sandbox(
+                sandbox_id=sandbox_id,
+                api_key=api_key,
+                base_url=base_url,
+            )
+            temp_sandbox.kill()
+        return True
+    except NotFoundError:
+        # Sandbox already deleted - that's fine, cleanup successful
+        return True
+    except Exception as e:
+        import logging
+        logger = logging.getLogger("hopx.test.cleanup")
+        logger.warning(f"Failed to cleanup sandbox {sandbox_id} by ID: {e}")
+        return False
+
+
 def _cleanup_all_sandboxes():
     """Clean up all registered sandboxes."""
     cleaned = 0
     errors = []
     
-    # Clean up sync sandboxes
+    # Clean up sync sandboxes via weak references
     for ref in list(_sandbox_registry):
         sandbox = ref()
         if sandbox is not None:
             try:
                 sandbox.kill()
                 cleaned += 1
+            except NotFoundError:
+                # Already deleted - that's fine
+                cleaned += 1
             except Exception as e:
-                errors.append(f"Failed to cleanup sync sandbox {getattr(sandbox, 'sandbox_id', 'unknown')}: {e}")
+                sandbox_id = getattr(sandbox, 'sandbox_id', 'unknown')
+                errors.append(f"Failed to cleanup sync sandbox {sandbox_id}: {e}")
     
-    # Clean up async sandboxes (synchronously - this is cleanup, not test execution)
+    # Clean up async sandboxes via weak references
     import asyncio
     for ref in list(_async_sandbox_registry):
         sandbox = ref()
@@ -108,8 +195,20 @@ def _cleanup_all_sandboxes():
                 
                 loop.run_until_complete(sandbox.kill())
                 cleaned += 1
+            except NotFoundError:
+                # Already deleted - that's fine
+                cleaned += 1
             except Exception as e:
-                errors.append(f"Failed to cleanup async sandbox {getattr(sandbox, 'sandbox_id', 'unknown')}: {e}")
+                sandbox_id = getattr(sandbox, 'sandbox_id', 'unknown')
+                errors.append(f"Failed to cleanup async sandbox {sandbox_id}: {e}")
+    
+    # Clean up sandboxes by ID (handles lost objects and failed creations)
+    for sandbox_id, api_key, base_url, is_async in list(_sandbox_id_registry):
+        if _cleanup_sandbox_by_id(sandbox_id, api_key, base_url, is_async):
+            cleaned += 1
+    
+    # Clear ID registry after cleanup
+    _sandbox_id_registry.clear()
     
     if cleaned > 0 or errors:
         import logging
@@ -285,6 +384,7 @@ def sandbox(api_key, test_base_url, test_template):
     cleans it up after the test completes, even if the test fails.
     """
     sandbox = None
+    sandbox_id = None
     try:
         sandbox = Sandbox.create(
             template=test_template,
@@ -292,17 +392,29 @@ def sandbox(api_key, test_base_url, test_template):
             base_url=test_base_url,
             timeout_seconds=600,  # 10 minutes
         )
+        sandbox_id = getattr(sandbox, 'sandbox_id', None)
         _register_sandbox(sandbox)
         yield sandbox
+    except Exception as e:
+        # If creation fails but we got a sandbox_id, try to clean up
+        if sandbox_id:
+            _cleanup_sandbox_by_id(sandbox_id, api_key, test_base_url, is_async=False)
+        raise e
     finally:
         # Always cleanup, even if test fails
         if sandbox is not None:
             try:
                 sandbox.kill()
+            except NotFoundError:
+                # Already deleted - that's fine
+                pass
             except Exception as e:
                 import logging
                 logger = logging.getLogger("hopx.test.cleanup")
                 logger.warning(f"Failed to cleanup sandbox {getattr(sandbox, 'sandbox_id', 'unknown')}: {e}")
+        elif sandbox_id:
+            # Sandbox object lost but we have the ID - try cleanup by ID
+            _cleanup_sandbox_by_id(sandbox_id, api_key, test_base_url, is_async=False)
 
 
 @pytest_asyncio.fixture
@@ -314,6 +426,7 @@ async def async_sandbox(api_key, test_base_url, test_template):
     cleans it up after the test completes, even if the test fails.
     """
     sandbox = None
+    sandbox_id = None
     try:
         sandbox = await AsyncSandbox.create(
             template=test_template,
@@ -321,17 +434,29 @@ async def async_sandbox(api_key, test_base_url, test_template):
             base_url=test_base_url,
             timeout_seconds=600,  # 10 minutes
         )
+        sandbox_id = getattr(sandbox, 'sandbox_id', None)
         _register_async_sandbox(sandbox)
         yield sandbox
+    except Exception as e:
+        # If creation fails but we got a sandbox_id, try to clean up
+        if sandbox_id:
+            _cleanup_sandbox_by_id(sandbox_id, api_key, test_base_url, is_async=True)
+        raise e
     finally:
         # Always cleanup, even if test fails
         if sandbox is not None:
             try:
                 await sandbox.kill()
+            except NotFoundError:
+                # Already deleted - that's fine
+                pass
             except Exception as e:
                 import logging
                 logger = logging.getLogger("hopx.test.cleanup")
                 logger.warning(f"Failed to cleanup async sandbox {getattr(sandbox, 'sandbox_id', 'unknown')}: {e}")
+        elif sandbox_id:
+            # Sandbox object lost but we have the ID - try cleanup by ID
+            _cleanup_sandbox_by_id(sandbox_id, api_key, test_base_url, is_async=True)
 
 
 @pytest.fixture
@@ -370,6 +495,9 @@ def cleanup_sandbox():
             if sandbox is not None:
                 try:
                     sandbox.kill()
+                except NotFoundError:
+                    # Already deleted - that's fine
+                    pass
                 except Exception as e:
                     import logging
                     logger = logging.getLogger("hopx.test.cleanup")
@@ -410,6 +538,9 @@ async def cleanup_async_sandbox():
             if sandbox is not None:
                 try:
                     await sandbox.kill()
+                except NotFoundError:
+                    # Already deleted - that's fine
+                    pass
                 except Exception as e:
                     import logging
                     logger = logging.getLogger("hopx.test.cleanup")
