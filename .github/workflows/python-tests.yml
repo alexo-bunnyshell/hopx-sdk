@@ -91,6 +91,7 @@ jobs:
       test_paths: ${{ steps.map-tests.outputs.test_paths }}
       run_integration: ${{ steps.map-tests.outputs.run_integration }}
       run_e2e: ${{ steps.map-tests.outputs.run_e2e }}
+      python_versions: ${{ steps.map-tests.outputs.python_versions }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -387,6 +388,12 @@ jobs:
             # Default to all supported versions
             PYTHON_VERSIONS='["3.8", "3.9", "3.10", "3.11", "3.12"]'
           fi
+          
+          # Ensure python_versions is always set (required for fromJSON)
+          if [ -z "$PYTHON_VERSIONS" ]; then
+            PYTHON_VERSIONS='["3.8", "3.9", "3.10", "3.11", "3.12"]'
+          fi
+          
           echo "python_versions=$PYTHON_VERSIONS" >> $GITHUB_OUTPUT
           echo "Python versions: $PYTHON_VERSIONS"
 
@@ -397,7 +404,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ${{ fromJSON(needs.determine-tests.outputs.python_versions) }}
+        python-version: ${{ fromJSON(needs.determine-tests.outputs.python_versions || '["3.8", "3.9", "3.10", "3.11", "3.12"]') }}
       fail-fast: false
 
     steps:
