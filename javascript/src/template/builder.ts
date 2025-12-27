@@ -13,6 +13,7 @@ export class Template {
   private steps: Step[] = [];
   private startCmd?: string;
   private readyCheck?: ReadyCheck;
+  private metadata: Record<string, string> = {};  // Internal metadata for build configuration
   
   /**
    * Create a new template builder
@@ -400,7 +401,7 @@ export class Template {
   }
   
   // ==================== Caching ====================
-  
+
   /**
    * Skip cache for this step
    */
@@ -409,6 +410,34 @@ export class Template {
       this.steps[this.steps.length - 1].skipCache = true;
     }
     return this;
+  }
+
+  // ==================== Internal Metadata ====================
+
+  /**
+   * Add internal metadata for build configuration.
+   *
+   * This is an internal API not intended for general use.
+   *
+   * Supported metadata keys:
+   * - "agent_version": Specify HopX agent version (e.g., "3.2.8", "latest", "dev")
+   *
+   * @param key - Metadata key
+   * @param value - Metadata value
+   * @returns Template builder for method chaining
+   * @internal
+   */
+  addMetadata(key: string, value: string): Template {
+    this.metadata[key] = value;
+    return this;
+  }
+
+  /**
+   * Get internal metadata dictionary
+   * @internal
+   */
+  getMetadata(): Record<string, string> {
+    return this.metadata;
   }
   
   // ==================== Start Command ====================

@@ -411,7 +411,13 @@ async function triggerBuild(
     skipCache: options.skipCache || false,
     update: options.update || false,
   };
-  
+
+  // Add internal metadata if present (hidden feature)
+  const metadata = template.getMetadata();
+  if (metadata['agent_version']) {
+    body.agent_version = metadata['agent_version'];
+  }
+
   // Add registry credentials if present
   if (registryAuth) {
     body.registry_credentials = {
